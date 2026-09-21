@@ -165,10 +165,12 @@ async def _run(branch_id: str, turns: int) -> None:
                 "agent_message",
                 {
                     "id": msg.id,
+                    "role": "agent",
                     "agent_id": agent.id,
                     "agent_name": agent.name,
                     "content": content,
                     "turn": msg.turn,
+                    "created_at": msg.created_at.isoformat() if msg.created_at else "",
                 },
             )
             await publish(

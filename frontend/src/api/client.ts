@@ -1,4 +1,13 @@
-import type { BranchInfo, ChatMessage, Discussion, GraphEdge, GraphNode, Project } from "../types";
+import type {
+  AnalysisProgress,
+  BranchInfo,
+  ChatMessage,
+  Discussion,
+  GraphEdge,
+  GraphNode,
+  Project,
+  ProjectContextInfo,
+} from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL as string) || "http://localhost:8000";
 
@@ -30,7 +39,12 @@ export const api = {
   analyzeProject: (id: string) =>
     req<{ status: string }>(`/api/projects/${id}/analyze`, { method: "POST" }),
   getProjectContext: (id: string) =>
-    req<{ status: string; project_path: string | null; context: unknown }>(`/api/projects/${id}/context`),
+    req<{
+      status: string;
+      project_path: string | null;
+      context: ProjectContextInfo | null;
+      progress: AnalysisProgress | null;
+    }>(`/api/projects/${id}/context`),
   listDrives: () => req<{ drives: string[] }>("/api/fs/drives"),
   browseDir: (path: string) =>
     req<{ path: string; parent: string | null; dirs: { name: string; path: string }[] }>(

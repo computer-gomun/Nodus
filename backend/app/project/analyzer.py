@@ -13,19 +13,13 @@ import re
 
 from app.llm.router import get_provider, model_for
 from app.project.models import ImportantFile, ProjectContext, project_context_schema
-from app.project import scanner
+from app.project import progress, scanner
 
 _SYSTEM = (
     "당신은 소프트웨어 프로젝트 분석기입니다. 제공된 파일 구조와 파일 내용만 근거로 "
     "프로젝트의 구조를 분석하여 지정된 JSON 스키마로만 답합니다. "
     "파일에 없는 내용을 추측하지 말고, 한국어로 간결하게 작성하세요."
 )
-
-_analyzing: set[str] = set()
-
-
-def is_analyzing(key: str) -> bool:
-    return key in _analyzing
 
 
 def select_important_files(paths: list[str]) -> list[str]:
@@ -62,20 +56,13 @@ def _extract_json(text: str) -> dict:
     raise ValueError("non-JSON analyzer output")
 
 
-async def analyze_project(project_path: str) -> ProjectContext:
+async def analyze_project(project_path: str, project_id: str) -> ProjectContext:
     """Full pipeline. Raises on hard failure; caller decides fallback."""
-    _analyzing.add(project_path)
-    try:
-        return await _analyze(project_path)
-    finally:
-        _analyzing.discard(project_path)
-
-
-async def _analyze(project_path: str) -> ProjectContext:
     root = os.path.abspath(project_path)
     paths = await asyncio.to_thread(scanner.scan_tree, root)
     meta = await asyncio.to_thread(scanner.read_meta, root)
     meta["languages"] = sorted(set(meta.get("languages") or []) | set(scanner.language_guess(paths)))
+    progress.done(project_id, "scan", f"파일 {len(paths)}개", scanned=len(paths))
 
     # ── Step 1+2: rank important files with LLM (structure only, cheap)
     tree_text = "\n".join(paths[:400])
@@ -135,18 +122,22 @@ async def _analyze(project_path: str) -> ProjectContext:
     if not selection:  # heuristic fallback for file ranking
         for p in select_important_files(paths)[:15]:
             selection.append(ImportantFile(path=p, purpose="", importance="high"))
+    progress.set_files(project_id, [f.model_dump() for f in selection])
+    progress.done(project_id, "rank", f"{len(selection)}개 선택", selected=len(selection))
 
     # ── Step 3: read selected file contents (redacted, capped)
     contents: list[str] = []
     budget = 30000
     for f in selection:
         body = await asyncio.to_thread(scanner.read_file, root, f.path, 4000)
+        progress.file_read(project_id, f.path, len(body))
         if not body:
             continue
         chunk = f"### {f.path}\n```\n{body[:3500]}\n```"
         if sum(len(c) for c in contents) + len(chunk) > budget:
             break
         contents.append(chunk)
+    progress.done(project_id, "read")
 
     # ── Step 4: generate the structured Project Context
     try:
@@ -186,6 +177,7 @@ async def _analyze(project_path: str) -> ProjectContext:
         ctx.stack.infrastructure = meta.get("infrastructure") or []
     if not ctx.project.name:
         ctx.project.name = meta.get("name") or ""
+    progress.done(project_id, "context", "완료")
     return ctx
 
 

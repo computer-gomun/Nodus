@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
 import ChatPane from "./chat/ChatPane";
+import AnalysisPanel from "./components/AnalysisPanel";
 import NodePanel from "./components/NodePanel";
 import ThemeToggle from "./components/ThemeToggle";
 import GraphView from "./graph/GraphView";
 import { useEventStream } from "./hooks/useEventStream";
 import SettingsModal from "./settings/SettingsModal";
-import type { BranchInfo, ChatMessage, Discussion, ModeratorAlert, Project } from "./types";
+import type {
+  AnalysisProgress,
+  BranchInfo,
+  ChatMessage,
+  Discussion,
+  ModeratorAlert,
+  Project,
+  ProjectContextInfo,
+} from "./types";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -24,6 +33,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"chat" | "graph">("chat");
   const [llmOk, setLlmOk] = useState<boolean | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisProgress | null>(null);
+  const [contextInfo, setContextInfo] = useState<ProjectContextInfo | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   const branchId = discussion?.id ?? null;
   const running = discussion?.is_running || thinking !== null || busy;
@@ -59,20 +71,58 @@ export default function App() {
     api.health().then((h) => setLlmOk(h.llm_configured)).catch(() => setLlmOk(false));
   }, [refreshProjects]);
 
-  // Poll while the Project Analyzer is running in the background
+  // Load the stored Project Context once per project (for the analysis panel).
   useEffect(() => {
-    if (project?.context_status !== "analyzing") return;
-    const t = setInterval(async () => {
-      if (!project) return;
+    const id = project?.id;
+    if (!id || !project?.project_path) {
+      setAnalysis(null);
+      setContextInfo(null);
+      return;
+    }
+    let alive = true;
+    api
+      .getProjectContext(id)
+      .then((c) => {
+        if (!alive) return;
+        setAnalysis(c.progress);
+        setContextInfo(c.context);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [project?.id, project?.project_path]);
+
+  // Follow the Project Analyzer while it runs, then refresh the project row once.
+  useEffect(() => {
+    const id = project?.id;
+    if (!id || project?.context_status !== "analyzing") return;
+    let alive = true;
+    let busy = false;
+    const tick = async () => {
+      if (busy) return;
+      busy = true;
       try {
-        const p = await api.getProject(project.id);
-        setProject(p);
-        if (p.context_status !== "analyzing") clearInterval(t);
+        const c = await api.getProjectContext(id);
+        if (!alive) return;
+        setAnalysis(c.progress);
+        setContextInfo(c.context);
+        if (c.status !== "analyzing") {
+          const p = await api.getProject(id);
+          if (alive) setProject(p);
+        }
       } catch {
-        /* ignore */
+        /* transient failures are retried on the next tick */
+      } finally {
+        busy = false;
       }
-    }, 6000);
-    return () => clearInterval(t);
+    };
+    tick();
+    const t = setInterval(tick, 1500);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
   }, [project?.id, project?.context_status]);
 
   useEventStream(branchId, {
@@ -270,6 +320,13 @@ export default function App() {
       ? discussion.graph_interval - (discussion.ai_turn_count % discussion.graph_interval)
       : 0;
   const maxLabel = discussion.max_turns < 0 ? "∞" : String(discussion.max_turns);
+  const currentStage = analysis?.stages.find((s) => s.status === "running");
+  const analysisLabel =
+    project.context_status === "analyzing"
+      ? `📁 폴더 분석 중 — ${currentStage?.label ?? "준비"}${currentStage?.detail ? ` (${currentStage.detail})` : ""}`
+      : project.context_status === "done"
+        ? "📁 코드 분석 완료 — 과정 보기"
+        : "📁 코드 분석 실패 — 과정 보기";
 
   return (
     <div>
@@ -284,10 +341,22 @@ export default function App() {
           <button className={mobileTab === "graph" ? "primary" : ""} onClick={() => setMobileTab("graph")}>아이디어 지도</button>
         </div>
         <span className="spacer" />
-        {project.context_status === "analyzing" && <span className="sub">📁 프로젝트 폴더 분석 중…</span>}
-        {project.context_status === "done" && <span className="sub">📁 프로젝트 코드 분석 완료 (모든 AI가 이 맥락으로 토론합니다)</span>}
+        {project.project_path && (
+          <button className="linkish" onClick={() => setShowAnalysis(true)} title="분석 과정 자세히 보기">
+            {analysisLabel}
+          </button>
+        )}
         {project.context_status === "failed" && (
-          <button onClick={async () => { try { await api.analyzeProject(project.id); } catch (e) { setError(`재분석 실패: ${e}`); } }}>
+          <button
+            onClick={async () => {
+              try {
+                await api.analyzeProject(project.id);
+                setProject(await api.getProject(project.id));
+              } catch (e) {
+                setError(`재분석 실패: ${e}`);
+              }
+            }}
+          >
             코드 분석 다시 시도
           </button>
         )}
@@ -386,6 +455,15 @@ export default function App() {
           )}
         </section>
       </div>
+      {showAnalysis && project.project_path && (
+        <AnalysisPanel
+          path={project.project_path}
+          progress={analysis}
+          context={contextInfo}
+          status={project.context_status ?? "none"}
+          onClose={() => setShowAnalysis(false)}
+        />
+      )}
       {showNew && <SettingsModal onClose={() => setShowNew(false)} onCreate={createProject} />}
     </div>
   );

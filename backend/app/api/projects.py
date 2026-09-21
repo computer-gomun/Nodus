@@ -16,8 +16,8 @@ from app.graph.manager import get_graph
 from app.models.branch import Branch
 from app.models.message import Message
 from app.models.project import Project
-from app.project import analyzer as project_analyzer
 from app.project import context as project_context_svc
+from app.project import progress
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -132,7 +132,8 @@ async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
         "project_path": project.project_path,
         "context_status": project.context_status,
         "context_summary": project_context_svc.stored_summary(project),
-        "is_analyzing": project_analyzer.is_analyzing(project.id),
+        "is_analyzing": progress.is_running(project_id),
+        "analysis": progress.snapshot(project_id),
     }
 
 
@@ -144,7 +145,7 @@ async def analyze_project_endpoint(project_id: str, db: AsyncSession = Depends(g
         raise HTTPException(404, "프로젝트를 찾을 수 없습니다")
     if not project.project_path:
         raise HTTPException(400, "이 프로젝트에는 연결된 폴더가 없습니다")
-    if project_analyzer.is_analyzing(project_id):
+    if progress.is_running(project_id):
         return {"status": "already_analyzing"}
     project.context_status = "analyzing"
     await db.commit()
@@ -161,6 +162,7 @@ async def get_project_context(project_id: str, db: AsyncSession = Depends(get_db
         "status": project.context_status,
         "project_path": project.project_path,
         "context": project_context_svc.context_json(project),
+        "progress": progress.snapshot(project_id),
     }
 
 

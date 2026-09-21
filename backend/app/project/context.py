@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project
 from app.project.analyzer import analyze_project, render_context_text
 from app.project.models import ProjectContext
-from app.project import scanner
+from app.project import progress, scanner
 
 
 async def run_and_store(project_id: str) -> ProjectContext | None:
@@ -21,15 +21,18 @@ async def run_and_store(project_id: str) -> ProjectContext | None:
         project = await session.get(Project, project_id)
         if project is None or not project.project_path:
             return None
+        progress.begin(project_id, project.project_path)
         try:
-            ctx = await analyze_project(project.project_path)
+            ctx = await analyze_project(project.project_path, project_id)
             project.project_context = ctx.model_dump_json()
             project.context_status = "done"
-        except Exception:
+            progress.finish(project_id, "done")
+        except Exception as e:
             import logging
 
             logging.getLogger("nodus.analyzer").exception("project analysis failed for %s", project_id)
             project.context_status = "failed"
+            progress.finish(project_id, "failed", f"{type(e).__name__}: {e}")
             await session.commit()
             return None
         await session.commit()

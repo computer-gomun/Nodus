@@ -8,6 +8,50 @@ export interface Project {
   project_path?: string | null;
   context_status?: string;
   context_summary?: string;
+  is_analyzing?: boolean;
+  analysis?: AnalysisProgress | null;
+}
+
+export interface AnalysisStage {
+  key: string;
+  label: string;
+  status: "pending" | "running" | "done";
+  detail: string;
+}
+
+export interface AnalysisFile {
+  path: string;
+  purpose: string;
+  importance: string;
+  read: boolean;
+  chars: number;
+}
+
+export interface AnalysisProgress {
+  project_id: string;
+  project_path: string;
+  status: "running" | "done" | "failed";
+  stage: string;
+  stages: AnalysisStage[];
+  files: AnalysisFile[];
+  counts: { scanned: number; selected: number; read: number; chars: number };
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+export interface ProjectContextInfo {
+  project: { name: string; description: string; purpose: string };
+  stack: { languages: string[]; frameworks: string[]; database: string[]; infrastructure: string[] };
+  architecture: { overview: string; components: string[]; data_flow: string[] };
+  entry_points: string[];
+  important_files: { path: string; purpose: string; importance: string }[];
+  apis: string[];
+  database: { technology: string; schema_summary: string; important_entities: string[] };
+  workflows: string[];
+  technical_concerns: string[];
+  development_notes: string[];
+  context_summary: string;
 }
 
 export interface BranchInfo {

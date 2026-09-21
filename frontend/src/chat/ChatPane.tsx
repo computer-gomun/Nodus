@@ -23,12 +23,12 @@ export default function ChatPane({
       {messages.map((m) => (
         <div key={m.id} className={`msg ${m.role}`}>
           <div className="who">
-            {m.role === "agent" ? (
-              <span className={`badge agent-${m.agent_id}`}>{m.agent_name}</span>
+            {m.role === "user" ? (
+              <span className="badge">나</span>
             ) : m.role === "moderator" ? (
               <span className="badge">진행 도우미</span>
             ) : (
-              <span className="badge">나</span>
+              <span className={`badge agent-${m.agent_id ?? ""}`}>{m.agent_name || "AI"}</span>
             )}
             {m.turn != null && <span className="turn">{m.turn}번째 발언</span>}
           </div>

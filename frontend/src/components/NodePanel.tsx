@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   EDGE_TYPE_LABEL,
   NODE_STATUS_LABEL,
@@ -29,6 +31,7 @@ export default function NodePanel({
   onOpenBranch: (branchId: string) => void;
   forking: boolean;
 }) {
+  const [tab, setTab] = useState<"node" | "all">("node");
   const byId = new Map(messages.map((m) => [m.id, m]));
   const related = edges.filter((e) => e.source === node.id || e.target === node.id).map((e) => {
     const otherId = e.source === node.id ? e.target : e.source;
@@ -58,18 +61,40 @@ export default function NodePanel({
           </ul>
         </>
       )}
-      <h4 style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 4px" }}>나온 발언</h4>
+      <h4 style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 4px" }}>발언</h4>
+      <div className="tabs">
+        <button className={`tab${tab === "node" ? " active" : ""}`} onClick={() => setTab("node")}>
+          이 아이디어 {node.source_messages.length}
+        </button>
+        <button className={`tab${tab === "all" ? " active" : ""}`} onClick={() => setTab("all")}>
+          전체 대화 {messages.length}
+        </button>
+      </div>
       <div className="src-list">
-        {node.source_messages.length === 0 && <div className="meta">연결된 발언이 없습니다.</div>}
-        {node.source_messages.map((mid) => {
-          const m = byId.get(mid);
-          return (
-            <div key={mid} className="src">
-              <b>{m ? `${m.agent_name ?? m.role}${m.turn ? ` · ${m.turn}번째 발언` : ""}` : mid}</b>
-              <div>{m ? m.content.slice(0, 160) : ""}</div>
-            </div>
-          );
-        })}
+        {tab === "node" ? (
+          <>
+            {node.source_messages.length === 0 && <div className="meta">연결된 발언이 없습니다.</div>}
+            {node.source_messages.map((mid) => {
+              const m = byId.get(mid);
+              return (
+                <div key={mid} className="src">
+                  <b>{m ? `${m.agent_name ?? (m.role === "user" ? "나" : m.role)}${m.turn ? ` · ${m.turn}번째 발언` : ""}` : mid}</b>
+                  <div>{m ? m.content.slice(0, 160) : ""}</div>
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          <>
+            {messages.length === 0 && <div className="meta">아직 발언이 없습니다.</div>}
+            {messages.map((m) => (
+              <div key={m.id} className={`src${node.source_messages.includes(m.id) ? " hit" : ""}`}>
+                <b>{`${m.agent_name ?? (m.role === "user" ? "나" : m.role)}${m.turn != null ? ` · ${m.turn}번째 발언` : ""}`}</b>
+                <div>{m.content}</div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
       <h4 style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 4px" }}>이 아이디어에서 갈라진 토론</h4>
       {branches.length === 0 ? (
