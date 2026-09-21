@@ -1,0 +1,2 @@
+# cmd.exe is line-ending sensitive; keep the Windows launcher on CRLF everywhere.
+*.bat text eol=crlf
