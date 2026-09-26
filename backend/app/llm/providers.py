@@ -202,9 +202,14 @@ class MockProvider(LLMProvider):
     async def stream(self, messages: list[dict[str, str]], model: str, **kwargs: Any) -> AsyncIterator[str]:
         if kwargs.get("role") == "conclusion":
             text = (
-                "[오프라인 데모 정리] 핵심 합의: 지금까지 나온 아이디어를 가장 작은 검증 단위로 쪼개 먼저 시험한다.\n"
-                "남은 쟁점: 범위를 어디까지 잡을지, 누가 우선순위를 정할지.\n"
-                "다음 행동: 2주 안에 끝낼 수 있는 실험 하나를 정해 결과를 확인한 뒤 다시 모인다."
+                "[오프라인 데모 정리]\n"
+                "결론\n"
+                "아이디어를 작은 실험부터 검증하자는 쪽으로 의견이 모였지만, 원래 질문에 대한 확정된 판단은 없습니다.\n"
+                "남은 쟁점\n"
+                "- 범위를 어디까지 잡을지\n"
+                "- 우선순위를 누가 정할지\n"
+                "제안 / 다음 행동\n"
+                "- 2주 안에 끝낼 수 있는 실험 하나를 정해 결과를 확인한다"
             )
             for w in text.split(" "):
                 yield w + " "

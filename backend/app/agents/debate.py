@@ -278,12 +278,11 @@ async def _write_conclusion(
         f"{m.agent_name or '나'}: {m.content}" for m in msgs if m.role in ("agent", "user", "conclusion")
     ]
     graph = await get_graph(session, branch_id)
-    graph_line = "; ".join(n["label"] for n in graph["nodes"][-15:])
 
     await publish(branch_id, "agent_start", {"agent_id": "conclusion", "agent_name": "결론"})
     chunks: list[str] = []
     try:
-        async for tok in stream_conclusion(topic, texts, graph_line, project_ctx_text):
+        async for tok in stream_conclusion(topic, texts, graph["nodes"], project_ctx_text):
             chunks.append(tok)
             await publish(branch_id, "token", {"agent_id": "conclusion", "token": tok})
     except Exception as e:
