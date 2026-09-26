@@ -133,7 +133,7 @@ async def conclude_discussion(branch_id: str, db: AsyncSession = Depends(get_db)
     if is_running(branch_id):
         request_conclusion(branch_id)
         return {"status": "requested"}
-    asyncio.create_task(run_conclusion(branch_id, "user"))
+    asyncio.create_task(run_conclusion(branch_id))
     return {"status": "started"}
 
 

@@ -1,21 +1,10 @@
-"""Conclusion: the moderator judges readiness, the user can force one at any time."""
+"""Conclusion: written by the moderator when the user asks for one. Never automatic."""
 
 from __future__ import annotations
 
-import re
 from collections.abc import AsyncIterator
 
 from app.llm.router import get_provider, model_for
-
-JUDGE_SYSTEM = (
-    "You are the moderator of a multi-AI brainstorm. Decide whether the debate has enough material "
-    "to be concluded NOW.\n"
-    "Reply with exactly one line:\n"
-    "'READY: <short Korean reason>' when the participants have converged on a direction, keep repeating "
-    "themselves, or have already covered the useful moves;\n"
-    "'NOT_READY' otherwise.\n"
-    "Never conclude early: a couple of shallow exchanges, or mere politeness, is NOT_READY."
-)
 
 CONCLUSION_SYSTEM = (
     "You are the moderator of a multi-AI brainstorm. Write the FINAL conclusion of the debate.\n"
@@ -27,31 +16,6 @@ CONCLUSION_SYSTEM = (
     "- If the debate did not converge, say so plainly and name the options still on the table.\n"
     "- Output the conclusion text only."
 )
-
-
-async def judge_ready(topic: str, messages: list[str], project_context: str = "") -> str | None:
-    """Ask the moderator whether the debate can be wrapped up. Returns its reason, or None."""
-    provider = get_provider()
-    convo = "\n".join(f"- {m[:300]}" for m in messages[-20:])
-    sys = JUDGE_SYSTEM
-    if project_context:
-        sys += f"\n\n{project_context[:4000]}\nThe debate concerns the project above."
-    prompt = [
-        {"role": "system", "content": sys},
-        {"role": "user", "content": f"Topic: {topic}\nRecent messages:\n{convo}"},
-    ]
-    try:
-        out = (await provider.generate(prompt, model=model_for("moderator"), temperature=0.2)).strip()
-    except Exception:
-        return None
-    # Tolerate "READY", "**READY**: …", "READY: …"; never match "NOT_READY".
-    m = re.match(r"\**\s*READY\b\**\s*[:：]?\s*(.*)", out, re.IGNORECASE | re.DOTALL)
-    if not m:
-        return None
-    reason = m.group(1).strip()
-    if reason:
-        reason = reason.splitlines()[0].strip()[:200]
-    return reason or "토론이 충분히 무르익었습니다"
 
 
 async def stream_conclusion(

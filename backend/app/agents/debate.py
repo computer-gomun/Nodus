@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import agents_for_count, debate_system_prompt
-from app.agents.conclusion import judge_ready, stream_conclusion
+from app.agents.conclusion import stream_conclusion
 from app.agents.moderator import observe
 from app.agents.scheduler import pick_next_agent
 from app.api.stream_bus import publish
@@ -122,7 +122,7 @@ async def _run(branch_id: str, turns: int) -> None:
                         f"Stay on topic: {topic}\n"
                         + ("Idea-graph so far: " + graph_line + "\n" if graph_line else "")
                         + f"Continue the debate as {agent.name}. Respond in Korean using plain everyday words "
-                        "(no jargon, no buzzwords), one focused move."
+                        "(no jargon, no buzzwords), blunt and provocative, no politeness. One focused move."
                     ),
                 },
             ]
@@ -245,25 +245,10 @@ async def _run(branch_id: str, turns: int) -> None:
                 await session.rollback()
                 await publish(branch_id, "error", {"message": f"지도 갱신 실패 (토론은 계속됩니다): {e}"})
 
-            # Conclusion: an explicit user request wins; otherwise the moderator judges every N turns.
-            reason = ""
+            # Conclusion: only an explicit user request ends a debate. Never automatic.
             if branch_id in _conclude_requested:
-                reason = "user"
-            elif (
-                settings.conclusion_check_interval > 0
-                and branch.ai_turn_count % settings.conclusion_check_interval == 0
-            ):
-                judged = await judge_ready(topic, all_texts, project_ctx_text)
-                if judged:
-                    reason = judged
-                    await publish(
-                        branch_id,
-                        "moderator_alert",
-                        {"type": "conclude", "message": f"토론이 무르익어 결론을 냅니다 — {judged}"},
-                    )
-            if reason:
                 _conclude_requested.discard(branch_id)
-                await _write_conclusion(session, branch_id, topic, project_ctx_text, reason)
+                await _write_conclusion(session, branch_id, topic, project_ctx_text)
                 concluded = True
                 break
 
@@ -279,7 +264,7 @@ async def _run(branch_id: str, turns: int) -> None:
 
 
 async def _write_conclusion(
-    session: AsyncSession, branch_id: str, topic: str, project_ctx_text: str, reason: str
+    session: AsyncSession, branch_id: str, topic: str, project_ctx_text: str
 ) -> None:
     """Stream the moderator's conclusion, store it as a message, and pin it on the idea graph."""
     msgs = (
@@ -291,7 +276,7 @@ async def _write_conclusion(
     graph = await get_graph(session, branch_id)
     graph_line = "; ".join(n["label"] for n in graph["nodes"][-15:])
 
-    await publish(branch_id, "agent_start", {"agent_id": "conclusion", "agent_name": "결론", "reason": reason})
+    await publish(branch_id, "agent_start", {"agent_id": "conclusion", "agent_name": "결론"})
     chunks: list[str] = []
     try:
         async for tok in stream_conclusion(topic, texts, graph_line, project_ctx_text):
@@ -319,12 +304,10 @@ async def _write_conclusion(
 
     updated = await upsert_conclusion(session, branch_id, content, [conclusion.id])
     await session.commit()
-    await publish(
-        branch_id, "conclusion", {"message": message_payload(conclusion), "graph": updated, "reason": reason}
-    )
+    await publish(branch_id, "conclusion", {"message": message_payload(conclusion), "graph": updated})
 
 
-async def run_conclusion(branch_id: str, reason: str = "user") -> None:
+async def run_conclusion(branch_id: str) -> None:
     """Conclude a branch. If a debate is live, ask it to conclude when the current turn ends."""
     if branch_id in _running:
         request_conclusion(branch_id)
@@ -340,7 +323,7 @@ async def run_conclusion(branch_id: str, reason: str = "user") -> None:
             branch.status = "running"
             await session.commit()
             await _write_conclusion(
-                session, branch_id, topic, load_context_text(project) if project else "", reason
+                session, branch_id, topic, load_context_text(project) if project else ""
             )
             branch.status = "idle"
             await session.commit()

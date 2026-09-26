@@ -13,8 +13,6 @@ class Settings(BaseSettings):
     llm_timeout_sec: float = 60.0
     # Safety cap for "Unlimited" discussions
     max_turns_safety_cap: int = 500
-    # The moderator re-checks "is this debatable enough to conclude?" every N AI turns (0 disables).
-    conclusion_check_interval: int = 5
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     @property
