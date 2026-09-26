@@ -9,13 +9,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.debate import is_running, run_discussion
+from app.agents.debate import is_running, request_conclusion, run_conclusion, run_discussion
 from app.api.stream_bus import publish
 from app.branching.manager import create_fork
 from app.database import get_db
 from app.graph.manager import get_graph
 from app.models.branch import Branch
-from app.models.message import Message
+from app.models.message import Message, message_payload
 from app.models.project import Project
 
 router = APIRouter(prefix="/api/discussions", tags=["discussions"])
@@ -32,18 +32,6 @@ class MessageBody(BaseModel):
 class ForkBody(BaseModel):
     fork_node_id: str | None = None
     name: str | None = None
-
-
-def _msg(m: Message) -> dict:
-    return {
-        "id": m.id,
-        "role": m.role,
-        "agent_id": m.agent_id,
-        "agent_name": m.agent_name,
-        "content": m.content,
-        "turn": m.turn,
-        "created_at": m.created_at.isoformat() if m.created_at else "",
-    }
 
 
 async def _discussion_payload(db: AsyncSession, branch: Branch) -> dict:
@@ -67,7 +55,7 @@ async def _discussion_payload(db: AsyncSession, branch: Branch) -> dict:
         "ai_turn_count": branch.ai_turn_count,
         "status": branch.status,
         "is_running": is_running(branch.id),
-        "messages": [_msg(m) for m in msgs],
+        "messages": [message_payload(m) for m in msgs],
         "graph": graph,
     }
 
@@ -125,8 +113,28 @@ async def post_user_message(branch_id: str, body: MessageBody, db: AsyncSession 
         project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(msg)
-    await publish(branch_id, "user_message", _msg(msg))
-    return _msg(msg)
+    await publish(branch_id, "user_message", message_payload(msg))
+    return message_payload(msg)
+
+
+@router.post("/{branch_id}/conclude")
+async def conclude_discussion(branch_id: str, db: AsyncSession = Depends(get_db)):
+    """User-triggered conclusion. Concludes now (idle) or at the end of the current turn (running)."""
+    branch = await db.get(Branch, branch_id)
+    if branch is None:
+        raise HTTPException(404, "토론을 찾을 수 없습니다")
+    spoke = (
+        await db.execute(
+            select(Message.id).where(Message.branch_id == branch_id, Message.role == "agent").limit(1)
+        )
+    ).first()
+    if spoke is None:
+        raise HTTPException(400, "아직 AI 발언이 없어 정리할 내용이 없습니다")
+    if is_running(branch_id):
+        request_conclusion(branch_id)
+        return {"status": "requested"}
+    asyncio.create_task(run_conclusion(branch_id, "user"))
+    return {"status": "started"}
 
 
 @router.get("/{branch_id}/graph")

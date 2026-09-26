@@ -6,8 +6,10 @@ import asyncio
 import random
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import agents_for_count, debate_system_prompt
+from app.agents.conclusion import judge_ready, stream_conclusion
 from app.agents.moderator import observe
 from app.agents.scheduler import pick_next_agent
 from app.api.stream_bus import publish
@@ -15,18 +17,25 @@ from app.branching.manager import build_context
 from app.config import settings
 from app.database import SessionLocal
 from app.graph.extractor import extract_snapshot
-from app.graph.manager import get_graph, merge_snapshot
+from app.graph.manager import get_graph, merge_snapshot, upsert_conclusion
 from app.llm.router import get_provider, model_for
 from app.models.branch import Branch
-from app.models.message import Message
-from app.models.project import Project
+from app.models.message import Message, message_payload
+from app.models.project import Project, utcnow
 from app.project.context import load_context_text
 
 _running: set[str] = set()
+# Branch ids where the user pressed "결론 내리기" while a debate was running:
+# the running loop concludes as soon as the current turn finishes.
+_conclude_requested: set[str] = set()
 
 
 def is_running(branch_id: str) -> bool:
     return branch_id in _running
+
+
+def request_conclusion(branch_id: str) -> None:
+    _conclude_requested.add(branch_id)
 
 
 async def run_discussion(branch_id: str, turns: int = 10) -> None:
@@ -38,6 +47,8 @@ async def run_discussion(branch_id: str, turns: int = 10) -> None:
         await _run(branch_id, turns)
     finally:
         _running.discard(branch_id)
+        # A pending request that never got to run must not fire on the next debate.
+        _conclude_requested.discard(branch_id)
 
 
 async def _run(branch_id: str, turns: int) -> None:
@@ -75,12 +86,12 @@ async def _run(branch_id: str, turns: int) -> None:
             await publish(branch_id, "done", {"reason": "turn_limit_reached"})
             return
 
+        concluded = False
         for _ in range(todo):
             # Re-check stop flag (user may pause by starting another run? keep simple: status check)
             await session.refresh(branch)
             if branch.status == "stopped":
                 break
-
             recent_ids_rows = (
                 await session.execute(
                     select(Message.agent_id)
@@ -178,8 +189,8 @@ async def _run(branch_id: str, turns: int) -> None:
             )
 
             # Moderator (silent; publishes only on trigger)
+            all_texts = [m.content for m in list(msgs) + [msg] if m.role in ("agent", "user", "conclusion")]
             try:
-                all_texts = [m.content for m in list(msgs) + [msg] if m.role in ("agent", "user")]
                 alert = await observe(topic, all_texts, project_context=project_ctx_text)
                 if alert:
                     mod = Message(
@@ -233,8 +244,106 @@ async def _run(branch_id: str, turns: int) -> None:
                 await session.rollback()
                 await publish(branch_id, "error", {"message": f"지도 갱신 실패 (토론은 계속됩니다): {e}"})
 
+            # Conclusion: an explicit user request wins; otherwise the moderator judges every N turns.
+            reason = ""
+            if branch_id in _conclude_requested:
+                reason = "user"
+            elif (
+                settings.conclusion_check_interval > 0
+                and branch.ai_turn_count % settings.conclusion_check_interval == 0
+            ):
+                judged = await judge_ready(topic, all_texts, project_ctx_text)
+                if judged:
+                    reason = judged
+                    await publish(
+                        branch_id,
+                        "moderator_alert",
+                        {"type": "conclude", "message": f"토론이 무르익어 결론을 냅니다 — {judged}"},
+                    )
+            if reason:
+                _conclude_requested.discard(branch_id)
+                await _write_conclusion(session, branch_id, topic, project_ctx_text, reason)
+                concluded = True
+                break
+
             await asyncio.sleep(0)
 
         branch.status = "idle"
         await session.commit()
-        await publish(branch_id, "done", {"turn": branch.ai_turn_count})
+        await publish(
+            branch_id,
+            "done",
+            {"turn": branch.ai_turn_count, "reason": "concluded" if concluded else "turn_complete"},
+        )
+
+
+async def _write_conclusion(
+    session: AsyncSession, branch_id: str, topic: str, project_ctx_text: str, reason: str
+) -> None:
+    """Stream the moderator's conclusion, store it as a message, and pin it on the idea graph."""
+    msgs = (
+        await session.execute(select(Message).where(Message.branch_id == branch_id).order_by(Message.created_at))
+    ).scalars().all()
+    texts = [
+        f"{m.agent_name or '나'}: {m.content}" for m in msgs if m.role in ("agent", "user", "conclusion")
+    ]
+    graph = await get_graph(session, branch_id)
+    graph_line = "; ".join(n["label"] for n in graph["nodes"][-15:])
+
+    await publish(branch_id, "agent_start", {"agent_id": "conclusion", "agent_name": "결론", "reason": reason})
+    chunks: list[str] = []
+    try:
+        async for tok in stream_conclusion(topic, texts, graph_line, project_ctx_text):
+            chunks.append(tok)
+            await publish(branch_id, "token", {"agent_id": "conclusion", "token": tok})
+    except Exception as e:
+        await publish(branch_id, "error", {"message": f"결론 생성 실패: {e}"})
+        return
+
+    content = "".join(chunks).strip()
+    if not content:
+        await publish(branch_id, "error", {"message": "결론이 비어 있어 저장하지 않았습니다"})
+        return
+
+    # Re-concluding a branch refreshes the same message instead of stacking duplicates.
+    conclusion = next((m for m in msgs if m.role == "conclusion"), None)
+    if conclusion is None:
+        conclusion = Message(branch_id=branch_id, role="conclusion", agent_name="결론", content=content)
+        session.add(conclusion)
+    else:
+        conclusion.content = content
+        conclusion.created_at = utcnow()  # keep the refreshed conclusion at the end of the chat
+    await session.commit()
+    await session.refresh(conclusion)
+
+    updated = await upsert_conclusion(session, branch_id, content, [conclusion.id])
+    await session.commit()
+    await publish(
+        branch_id, "conclusion", {"message": message_payload(conclusion), "graph": updated, "reason": reason}
+    )
+
+
+async def run_conclusion(branch_id: str, reason: str = "user") -> None:
+    """Conclude a branch. If a debate is live, ask it to conclude when the current turn ends."""
+    if branch_id in _running:
+        request_conclusion(branch_id)
+        return
+    _running.add(branch_id)
+    try:
+        async with SessionLocal() as session:
+            branch = await session.get(Branch, branch_id)
+            if branch is None:
+                return
+            project = await session.get(Project, branch.project_id)
+            topic = project.topic if project else ""
+            branch.status = "running"
+            await session.commit()
+            await _write_conclusion(
+                session, branch_id, topic, load_context_text(project) if project else "", reason
+            )
+            branch.status = "idle"
+            await session.commit()
+            await publish(branch_id, "done", {"turn": branch.ai_turn_count, "reason": "concluded"})
+    finally:
+        _running.discard(branch_id)
+        _conclude_requested.discard(branch_id)

@@ -27,6 +27,8 @@ export default function ChatPane({
               <span className="badge">나</span>
             ) : m.role === "moderator" ? (
               <span className="badge">진행 도우미</span>
+            ) : m.role === "conclusion" ? (
+              <span className="badge badge-conclusion">결론</span>
             ) : (
               <span className={`badge agent-${m.agent_id ?? ""}`}>{m.agent_name || "AI"}</span>
             )}

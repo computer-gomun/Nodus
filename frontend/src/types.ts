@@ -73,7 +73,7 @@ export interface BranchInfo {
 
 export interface ChatMessage {
   id: string;
-  role: "agent" | "user" | "moderator";
+  role: "agent" | "user" | "moderator" | "conclusion";
   agent_id?: string | null;
   agent_name?: string | null;
   content: string;

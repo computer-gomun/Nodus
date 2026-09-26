@@ -14,6 +14,8 @@
   --warn: #b45309;
   --warn-soft: #fef3c7;
   --warn-line: #f5d78e;
+  --conclusion-soft: #f1ecfe;
+  --conclusion-line: #cbb8fb;
   --progress-track: #eeeeee;
   --overlay: rgba(0, 0, 0, 0.3);
   --badge-bg: #eef0f3;
@@ -70,6 +72,8 @@
   --warn: #f0b429;
   --warn-soft: #33280f;
   --warn-line: #57461a;
+  --conclusion-soft: #241d3d;
+  --conclusion-line: #4b3a7d;
   --progress-track: #262b35;
   --overlay: rgba(0, 0, 0, 0.6);
   --badge-bg: #262b35;
@@ -140,8 +144,10 @@ body { margin: 0; font-family: "Pretendard", -apple-system, "Segoe UI", Roboto, 
 .msg .body { font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
 .msg.user { background: var(--accent-soft); border-color: var(--accent-line); }
 .msg.moderator { background: var(--warn-soft); border-color: var(--warn-line); }
+.msg.conclusion { background: var(--conclusion-soft); border-color: var(--conclusion-line); }
 .msg.streaming { border-style: dashed; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 20px; background: var(--badge-bg); color: var(--badge-ink); }
+.badge.badge-conclusion, .badge.agent-conclusion { background: var(--node-conclusion); color: var(--panel); }
 .badge.agent-A { background: var(--badge-a); } .badge.agent-B { background: var(--badge-b); }
 .badge.agent-C { background: var(--badge-c); } .badge.agent-D { background: var(--badge-d); }
 .badge.agent-E { background: var(--badge-e); }

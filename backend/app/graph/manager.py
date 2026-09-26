@@ -101,6 +101,34 @@ async def merge_snapshot(session: AsyncSession, branch_id: str, snap: GraphSnaps
     return await get_graph(session, branch_id)
 
 
+async def upsert_conclusion(
+    session: AsyncSession, branch_id: str, description: str, source_messages: list[str]
+) -> dict:
+    """Pin/refresh the branch's conclusion node (stable id), then return the full graph."""
+    node_id = f"node_conclusion_{branch_id}"
+    node = await session.get(GraphNode, node_id)
+    sources = json.dumps(source_messages, ensure_ascii=False)
+    if node is None:
+        session.add(
+            GraphNode(
+                id=node_id,
+                branch_id=branch_id,
+                type="conclusion",
+                label="토론 결론",
+                description=description[:500],
+                status="active",
+                source_messages=sources,
+            )
+        )
+    else:
+        node.type = "conclusion"
+        node.description = description[:500]
+        node.status = "active"
+        node.source_messages = sources
+    await session.flush()
+    return await get_graph(session, branch_id)
+
+
 async def clone_graph(session: AsyncSession, from_branch: str, to_branch: str) -> dict[str, str]:
     """Copy graph to a new branch with fresh ids (PK is global). Returns old->new id map."""
     nodes = (await session.execute(select(GraphNode).where(GraphNode.branch_id == from_branch))).scalars().all()

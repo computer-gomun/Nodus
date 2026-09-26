@@ -29,6 +29,7 @@ export default function App() {
   const [composer, setComposer] = useState("");
   const [runTurns, setRunTurns] = useState(10);
   const [busy, setBusy] = useState(false);
+  const [concluding, setConcluding] = useState(false);
   const [forking, setForking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"chat" | "graph">("chat");
@@ -164,6 +165,21 @@ export default function App() {
             created_at: new Date().toISOString(),
           };
           setDiscussion((prev) => (prev ? { ...prev, messages: [...prev.messages, m] } : prev));
+        } else if (event === "conclusion") {
+          const m = d.message as ChatMessage;
+          const g = d.graph as Discussion["graph"] | undefined;
+          setDiscussion((prev) => {
+            if (!prev) return prev;
+            // Re-concluding refreshes the same conclusion message instead of stacking duplicates.
+            const exists = prev.messages.some((x) => x.id === m.id);
+            return {
+              ...prev,
+              messages: exists ? prev.messages.map((x) => (x.id === m.id ? m : x)) : [...prev.messages, m],
+              graph: g ?? prev.graph,
+            };
+          });
+          setStreaming(null);
+          setThinking(null);
         } else if (event === "done") {
           setThinking(null);
           setStreaming(null);
@@ -202,6 +218,19 @@ export default function App() {
     }
     setBusy(false);
     setThinking(null);
+  };
+
+  const conclude = async () => {
+    if (!discussion || concluding) return;
+    setConcluding(true);
+    setError(null);
+    try {
+      await api.concludeDiscussion(discussion.id);
+    } catch (e) {
+      setError(`결론 내리기 실패: ${e}`);
+    } finally {
+      setConcluding(false);
+    }
   };
 
   const send = async () => {
@@ -411,6 +440,13 @@ export default function App() {
               ) : (
                 <button onClick={stop}>중지</button>
               )}
+              <button
+                onClick={conclude}
+                disabled={concluding || !discussion.messages.some((m) => m.role === "agent")}
+                title="지금까지의 토론을 정리해 결론을 냅니다 (토론 중이면 현재 발언이 끝난 뒤)"
+              >
+                {concluding ? "결론 요청 중…" : "결론 내리기"}
+              </button>
             </div>
           </div>
           <div className="composer">

@@ -18,3 +18,16 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text)
     turn: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)  # AI turn number (None for user msgs)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+def message_payload(m: Message) -> dict:
+    """Wire shape of a message (REST + SSE)."""
+    return {
+        "id": m.id,
+        "role": m.role,
+        "agent_id": m.agent_id,
+        "agent_name": m.agent_name,
+        "content": m.content,
+        "turn": m.turn,
+        "created_at": m.created_at.isoformat() if m.created_at else "",
+    }

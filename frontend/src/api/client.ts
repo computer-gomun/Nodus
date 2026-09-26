@@ -64,6 +64,8 @@ export const api = {
     }),
   stopDiscussion: (id: string) =>
     req<{ status: string }>(`/api/discussions/${id}/stop`, { method: "POST" }),
+  concludeDiscussion: (id: string) =>
+    req<{ status: string }>(`/api/discussions/${id}/conclude`, { method: "POST" }),
   sendMessage: (id: string, content: string) =>
     req<ChatMessage>(`/api/discussions/${id}/message`, {
       method: "POST",
