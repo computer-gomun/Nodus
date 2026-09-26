@@ -30,6 +30,7 @@ export default function App() {
   const [runTurns, setRunTurns] = useState(10);
   const [busy, setBusy] = useState(false);
   const [concluding, setConcluding] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [forking, setForking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"chat" | "graph">("chat");
@@ -269,6 +270,28 @@ export default function App() {
     }
   };
 
+  const restart = async () => {
+    if (!discussion || restarting) return;
+    if (running && !window.confirm("진행 중인 토론을 멈추고 처음부터 다시 시작할까요?")) return;
+    setRestarting(true);
+    setError(null);
+    try {
+      const fresh = await api.restartDiscussion(discussion.id);
+      if (project) setProject(await api.getProject(project.id));
+      setDiscussion(fresh);
+      setSelectedNode(null);
+      setAlert(null);
+      setStreaming(null);
+      setThinking(null);
+      setConcluding(false);
+      setComposer("");
+    } catch (e) {
+      setError(`처음부터 다시 시작 실패: ${e}`);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   const openBranch = async (branchId: string) => {
     try {
       const d = await api.getDiscussion(branchId);
@@ -400,7 +423,18 @@ export default function App() {
 
       <div className={`layout ${mobileTab === "chat" ? "chat-tab" : "graph-tab"}`}>
         <section className="pane chat-col">
-          <div className="pane-head"><h2>토론 — {discussion.name}</h2></div>
+          <div className="pane-head">
+            <h2>토론 — {discussion.name}</h2>
+            <button
+              className="linkish"
+              style={{ marginLeft: "auto" }}
+              onClick={restart}
+              disabled={restarting}
+              title="대화·아이디어 지도를 물려받지 않는 새 토론을 만들어 처음부터 시작합니다 (기존 토론은 그대로 남습니다)"
+            >
+              {restarting ? "새 토론 만드는 중…" : "처음부터 다시 시작"}
+            </button>
+          </div>
           <div className="branches">
             {project.branches.map((b) => (
               <button

@@ -119,6 +119,35 @@ async def create_fork(
     return child, node_map
 
 
+async def create_restart(session: AsyncSession, parent: Branch) -> Branch:
+    """A fresh branch for the same project: same settings, nothing inherited — no messages, no graph."""
+    taken = set(
+        (
+            await session.execute(select(Branch.name).where(Branch.project_id == parent.project_id))
+        ).scalars().all()
+    )
+    name, n = "처음부터 다시", 2
+    while name in taken:
+        name = f"처음부터 다시 {n}"
+        n += 1
+
+    child = Branch(
+        project_id=parent.project_id,
+        parent_branch_id=parent.id,
+        fork_node_id=None,
+        fork_source_node_id=None,
+        fork_turn=0,
+        name=name,
+        agent_count=parent.agent_count,
+        graph_interval=parent.graph_interval,
+        max_turns=parent.max_turns,
+        ai_turn_count=0,
+    )
+    session.add(child)
+    await session.flush()
+    return child
+
+
 def build_context(
     topic: str,
     branch: Branch,

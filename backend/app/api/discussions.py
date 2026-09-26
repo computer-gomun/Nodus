@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.debate import is_running, request_conclusion, run_conclusion, run_discussion
 from app.api.stream_bus import publish
-from app.branching.manager import create_fork
+from app.branching.manager import create_fork, create_restart
 from app.database import get_db
 from app.graph.manager import get_graph
 from app.models.branch import Branch
@@ -128,6 +128,22 @@ async def conclude_discussion(branch_id: str, db: AsyncSession = Depends(get_db)
         return {"status": "requested"}
     asyncio.create_task(run_conclusion(branch_id))
     return {"status": "started"}
+
+
+@router.post("/{branch_id}/restart")
+async def restart_discussion(branch_id: str, db: AsyncSession = Depends(get_db)):
+    """Start this discussion over on a fresh branch (no inherited messages or graph). Parent untouched."""
+    parent = await db.get(Branch, branch_id)
+    if parent is None:
+        raise HTTPException(404, "토론을 찾을 수 없습니다")
+    if is_running(branch_id):
+        # The runner loop exits after the current turn; the fresh branch takes over from there.
+        parent.status = "stopped"
+    child = await create_restart(db, parent)
+    await db.commit()
+    await db.refresh(child)
+    await publish(branch_id, "branch_created", {"branch_id": child.id, "reason": "restart"})
+    return await _discussion_payload(db, child)
 
 
 @router.get("/{branch_id}/graph")

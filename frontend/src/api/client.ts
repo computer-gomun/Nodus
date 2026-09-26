@@ -76,6 +76,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ fork_node_id, name }),
     }),
+  restartDiscussion: (id: string) =>
+    req<Discussion>(`/api/discussions/${id}/restart`, { method: "POST" }),
   streamUrl: (id: string) => `${BASE}/api/discussions/${id}/stream`,
 };
 
