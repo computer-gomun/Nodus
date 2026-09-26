@@ -21,8 +21,9 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
   `conclusion` 노드로 고정됩니다.
 - 점진적 아이디어 지도 (타입이 있는 노드/엣지, LLM 구조화 출력 + Pydantic 검증 + 재시도)
 - 분기: 어떤 그래프 노드에서든 갈라내기, 맥락 + 그래프 상속, 부모는 그대로 유지
-- 처음부터 다시 시작: 대화·아이디어 지도를 물려받지 않는 새 토론을 만들어 그쪽으로 이동
-  (기존 토론은 그대로 남고, 진행 중이었다면 현재 발언 뒤 멈춥니다)
+- 처음부터 다시 시작: 이 토론의 대화 기록과 아이디어 지도를 **모두 지우고** 빈 상태로 되돌립니다
+  (되돌릴 수 없음). 진행 중이었다면 스트리밍 중이던 발언은 저장하지 않고 멈추며, AI는 지워진
+  기록을 볼 수 없습니다. 다른 가지들은 영향을 받지 않습니다.
 - 언제든 사용자 개입 가능 (사용자 메시지는 AI 턴으로 세지 않음)
 - PostgreSQL 저장, Docker Compose 한 방 실행
 - 오프라인 데모 모드: `LLM_API_KEY`가 없어도 내장 mock 프로바이더가
@@ -162,7 +163,7 @@ POST /api/discussions/{id}/conclude       결론 내기 (사용자 요청)
 GET  /api/discussions/{id}/stream         SSE 이벤트 스트림
 GET  /api/discussions/{id}/graph          현재 그래프
 POST /api/discussions/{id}/branches       노드에서 분기
-POST /api/discussions/{id}/restart        처음부터 다시 시작 (새 토론)
+POST /api/discussions/{id}/restart        처음부터 다시 시작 (기록·지도 삭제)
 GET  /api/branches/{id}                   가지 상세
 GET  /api/health                          헬스 + LLM 상태
 ```

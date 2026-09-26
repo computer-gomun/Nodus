@@ -28,14 +28,25 @@ _running: set[str] = set()
 # Branch ids where the user pressed "결론 내리기" while a debate was running:
 # the running loop concludes as soon as the current turn finishes.
 _conclude_requested: set[str] = set()
+# Branch ids with a conclusion being written right now (restart must not race it).
+_concluding: set[str] = set()
 
 
 def is_running(branch_id: str) -> bool:
     return branch_id in _running
 
 
+def is_concluding(branch_id: str) -> bool:
+    return branch_id in _concluding
+
+
 def request_conclusion(branch_id: str) -> None:
     _conclude_requested.add(branch_id)
+
+
+def clear_conclusion_request(branch_id: str) -> None:
+    """Drop a queued 결론 내리기 request (the branch was restarted before it could run)."""
+    _conclude_requested.discard(branch_id)
 
 
 async def run_discussion(branch_id: str, turns: int = 10) -> None:
@@ -140,6 +151,11 @@ async def _run(branch_id: str, turns: int) -> None:
                 # Skip failed agent, keep debate alive
                 await publish(branch_id, "error", {"message": f"{agent.name} 발언 실패, 건너뜁니다: {e}"})
                 continue
+
+            # Stop (or restart) pressed while this turn was streaming: drop it instead of persisting.
+            await session.refresh(branch)
+            if branch.status == "stopped":
+                break
 
             content = "".join(chunks).strip()
             # Strip echoed "[name] ..." / "name: ..." prefixes copied from context format
@@ -325,6 +341,7 @@ async def run_conclusion(branch_id: str) -> None:
         request_conclusion(branch_id)
         return
     _running.add(branch_id)
+    _concluding.add(branch_id)
     try:
         async with SessionLocal() as session:
             branch = await session.get(Branch, branch_id)
@@ -348,4 +365,5 @@ async def run_conclusion(branch_id: str) -> None:
             await publish(branch_id, "done", {"turn": turn, "reason": "concluded"})
     finally:
         _running.discard(branch_id)
+        _concluding.discard(branch_id)
         _conclude_requested.discard(branch_id)

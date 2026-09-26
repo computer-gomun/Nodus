@@ -1,15 +1,15 @@
-"""Branching: fork-from-node with inherited context + graph state."""
+"""Branch lifecycle: fork-from-node with inherited context + graph state, and empty resets."""
 
 from __future__ import annotations
 
 import json
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.graph.manager import clone_graph
 from app.models.branch import Branch
-from app.models.graph import GraphNode
+from app.models.graph import GraphEdge, GraphNode
 from app.models.message import Message
 
 
@@ -119,33 +119,16 @@ async def create_fork(
     return child, node_map
 
 
-async def create_restart(session: AsyncSession, parent: Branch) -> Branch:
-    """A fresh branch for the same project: same settings, nothing inherited — no messages, no graph."""
-    taken = set(
-        (
-            await session.execute(select(Branch.name).where(Branch.project_id == parent.project_id))
-        ).scalars().all()
-    )
-    name, n = "처음부터 다시", 2
-    while name in taken:
-        name = f"처음부터 다시 {n}"
-        n += 1
+async def reset_discussion(session: AsyncSession, branch: Branch) -> None:
+    """Erase a branch's history — messages, idea graph, turn counter — so it restarts empty.
 
-    child = Branch(
-        project_id=parent.project_id,
-        parent_branch_id=parent.id,
-        fork_node_id=None,
-        fork_source_node_id=None,
-        fork_turn=0,
-        name=name,
-        agent_count=parent.agent_count,
-        graph_interval=parent.graph_interval,
-        max_turns=parent.max_turns,
-        ai_turn_count=0,
-    )
-    session.add(child)
+    The branch row itself (name, settings, id) is kept; callers own its status.
+    """
+    await session.execute(delete(Message).where(Message.branch_id == branch.id))
+    await session.execute(delete(GraphEdge).where(GraphEdge.branch_id == branch.id))
+    await session.execute(delete(GraphNode).where(GraphNode.branch_id == branch.id))
+    branch.ai_turn_count = 0
     await session.flush()
-    return child
 
 
 def build_context(

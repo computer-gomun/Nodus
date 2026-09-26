@@ -9,9 +9,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.debate import is_running, request_conclusion, run_conclusion, run_discussion
+from app.agents.debate import (
+    clear_conclusion_request,
+    is_concluding,
+    is_running,
+    request_conclusion,
+    run_conclusion,
+    run_discussion,
+)
 from app.api.stream_bus import publish
-from app.branching.manager import create_fork, create_restart
+from app.branching.manager import create_fork, reset_discussion
 from app.database import get_db
 from app.graph.manager import get_graph
 from app.models.branch import Branch
@@ -132,18 +139,21 @@ async def conclude_discussion(branch_id: str, db: AsyncSession = Depends(get_db)
 
 @router.post("/{branch_id}/restart")
 async def restart_discussion(branch_id: str, db: AsyncSession = Depends(get_db)):
-    """Start this discussion over on a fresh branch (no inherited messages or graph). Parent untouched."""
-    parent = await db.get(Branch, branch_id)
-    if parent is None:
+    """Erase this discussion's history (messages + idea graph) and leave it empty for a fresh start."""
+    branch = await db.get(Branch, branch_id)
+    if branch is None:
         raise HTTPException(404, "토론을 찾을 수 없습니다")
+    if is_concluding(branch_id):
+        raise HTTPException(409, "결론을 작성하는 중입니다. 끝난 뒤에 다시 시도해 주세요")
+    clear_conclusion_request(branch_id)
     if is_running(branch_id):
-        # The runner loop exits after the current turn; the fresh branch takes over from there.
-        parent.status = "stopped"
-    child = await create_restart(db, parent)
+        # The loop drops the in-flight turn and exits; then this branch is empty.
+        branch.status = "stopped"
+    else:
+        branch.status = "idle"
+    await reset_discussion(db, branch)
     await db.commit()
-    await db.refresh(child)
-    await publish(branch_id, "branch_created", {"branch_id": child.id, "reason": "restart"})
-    return await _discussion_payload(db, child)
+    return await _discussion_payload(db, branch)
 
 
 @router.get("/{branch_id}/graph")

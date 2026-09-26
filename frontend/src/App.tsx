@@ -272,12 +272,14 @@ export default function App() {
 
   const restart = async () => {
     if (!discussion || restarting) return;
-    if (running && !window.confirm("진행 중인 토론을 멈추고 처음부터 다시 시작할까요?")) return;
+    const ok = window.confirm(
+      "이 토론의 대화 기록과 아이디어 지도를 모두 지우고 처음부터 시작할까요? (되돌릴 수 없습니다)"
+    );
+    if (!ok) return;
     setRestarting(true);
     setError(null);
     try {
       const fresh = await api.restartDiscussion(discussion.id);
-      if (project) setProject(await api.getProject(project.id));
       setDiscussion(fresh);
       setSelectedNode(null);
       setAlert(null);
@@ -430,9 +432,9 @@ export default function App() {
               style={{ marginLeft: "auto" }}
               onClick={restart}
               disabled={restarting}
-              title="대화·아이디어 지도를 물려받지 않는 새 토론을 만들어 처음부터 시작합니다 (기존 토론은 그대로 남습니다)"
+              title="이 토론의 대화 기록과 아이디어 지도를 모두 지우고 빈 상태에서 다시 시작합니다 (되돌릴 수 없습니다)"
             >
-              {restarting ? "새 토론 만드는 중…" : "처음부터 다시 시작"}
+              {restarting ? "지우는 중…" : "처음부터 다시 시작"}
             </button>
           </div>
           <div className="branches">
