@@ -121,7 +121,8 @@ async def _run(branch_id: str, turns: int) -> None:
                     "content": (
                         f"Stay on topic: {topic}\n"
                         + ("Idea-graph so far: " + graph_line + "\n" if graph_line else "")
-                        + f"Continue the debate as {agent.name}. Respond in Korean, one focused move."
+                        + f"Continue the debate as {agent.name}. Respond in Korean using plain everyday words "
+                        "(no jargon, no buzzwords), one focused move."
                     ),
                 },
             ]
