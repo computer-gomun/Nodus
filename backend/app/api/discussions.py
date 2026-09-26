@@ -123,13 +123,6 @@ async def conclude_discussion(branch_id: str, db: AsyncSession = Depends(get_db)
     branch = await db.get(Branch, branch_id)
     if branch is None:
         raise HTTPException(404, "토론을 찾을 수 없습니다")
-    spoke = (
-        await db.execute(
-            select(Message.id).where(Message.branch_id == branch_id, Message.role == "agent").limit(1)
-        )
-    ).first()
-    if spoke is None:
-        raise HTTPException(400, "아직 AI 발언이 없어 정리할 내용이 없습니다")
     if is_running(branch_id):
         request_conclusion(branch_id)
         return {"status": "requested"}

@@ -61,6 +61,7 @@ export default function App() {
         setSelectedNode(null);
         setAlert(null);
         setStreaming(null);
+        setConcluding(false);
       }
     } catch (e) {
       setError(`프로젝트를 열지 못했습니다: ${e}`);
@@ -180,10 +181,12 @@ export default function App() {
           });
           setStreaming(null);
           setThinking(null);
+          setConcluding(false);
         } else if (event === "done") {
           setThinking(null);
           setStreaming(null);
           setBusy(false);
+          setConcluding(false);
           if (branchId) api.getDiscussion(branchId).then(setDiscussion).catch(() => {});
           if (project) api.getProject(project.id).then(setProject).catch(() => {});
         } else if (event === "error") {
@@ -228,9 +231,9 @@ export default function App() {
       await api.concludeDiscussion(discussion.id);
     } catch (e) {
       setError(`결론 내리기 실패: ${e}`);
-    } finally {
       setConcluding(false);
     }
+    // 결론이 도착하면(conclusion/done 이벤트) 버튼이 다시 열린다.
   };
 
   const send = async () => {
@@ -258,6 +261,7 @@ export default function App() {
       setDiscussion(child);
       setSelectedNode(null);
       setAlert(null);
+      setConcluding(false);
     } catch (e) {
       setError(`분기 생성 실패: ${e}`);
     } finally {
@@ -272,6 +276,7 @@ export default function App() {
       setSelectedNode(null);
       setAlert(null);
       setStreaming(null);
+      setConcluding(false);
     } catch (e) {
       setError(`토론을 열지 못했습니다: ${e}`);
     }
@@ -442,10 +447,10 @@ export default function App() {
               )}
               <button
                 onClick={conclude}
-                disabled={concluding || !discussion.messages.some((m) => m.role === "agent")}
+                disabled={concluding}
                 title="지금까지의 토론을 정리해 결론을 냅니다 (토론 중이면 현재 발언이 끝난 뒤)"
               >
-                {concluding ? "결론 요청 중…" : "결론 내리기"}
+                {concluding ? "결론 정리 중…" : "결론 내리기"}
               </button>
             </div>
           </div>

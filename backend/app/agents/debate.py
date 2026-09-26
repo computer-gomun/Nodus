@@ -248,7 +248,11 @@ async def _run(branch_id: str, turns: int) -> None:
             # Conclusion: only an explicit user request ends a debate. Never automatic.
             if branch_id in _conclude_requested:
                 _conclude_requested.discard(branch_id)
-                await _write_conclusion(session, branch_id, topic, project_ctx_text)
+                try:
+                    await _write_conclusion(session, branch_id, topic, project_ctx_text)
+                except Exception as e:
+                    await session.rollback()
+                    await publish(branch_id, "error", {"message": f"결론 생성 중 오류: {e}"})
                 concluded = True
                 break
 
@@ -302,9 +306,18 @@ async def _write_conclusion(
     await session.commit()
     await session.refresh(conclusion)
 
-    updated = await upsert_conclusion(session, branch_id, content, [conclusion.id])
-    await session.commit()
-    await publish(branch_id, "conclusion", {"message": message_payload(conclusion), "graph": updated})
+    updated: dict | None = None
+    try:
+        updated = await upsert_conclusion(session, branch_id, content, [conclusion.id])
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        await publish(branch_id, "error", {"message": f"결론을 지도에 고정하지 못했습니다: {e}"})
+
+    payload: dict = {"message": message_payload(conclusion)}
+    if updated:
+        payload["graph"] = updated
+    await publish(branch_id, "conclusion", payload)
 
 
 async def run_conclusion(branch_id: str) -> None:
@@ -322,12 +335,18 @@ async def run_conclusion(branch_id: str) -> None:
             topic = project.topic if project else ""
             branch.status = "running"
             await session.commit()
-            await _write_conclusion(
-                session, branch_id, topic, load_context_text(project) if project else ""
-            )
+            turn = branch.ai_turn_count
+            try:
+                await _write_conclusion(
+                    session, branch_id, topic, load_context_text(project) if project else ""
+                )
+            except Exception as e:
+                await session.rollback()
+                await publish(branch_id, "error", {"message": f"결론 생성 중 오류: {e}"})
+            # The UI waits for `done`; never leave it hanging on a failed conclusion.
             branch.status = "idle"
             await session.commit()
-            await publish(branch_id, "done", {"turn": branch.ai_turn_count, "reason": "concluded"})
+            await publish(branch_id, "done", {"turn": turn, "reason": "concluded"})
     finally:
         _running.discard(branch_id)
         _conclude_requested.discard(branch_id)

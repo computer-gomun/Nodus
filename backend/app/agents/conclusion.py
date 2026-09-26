@@ -13,6 +13,8 @@ CONCLUSION_SYSTEM = (
     "- Cover: 핵심 합의 (what the group converged on), 남은 쟁점 (unresolved disagreement or open questions), "
     "다음 행동 (concrete next steps for the user).\n"
     "- Use ONLY what the conversation and the idea graph contain. Never invent facts, numbers or new ideas.\n"
+    "- If the debate barely started (little or nothing said yet), reply with one short line saying there is "
+    "nothing to summarize yet instead of inventing a conclusion.\n"
     "- If the debate did not converge, say so plainly and name the options still on the table.\n"
     "- Output the conclusion text only."
 )
