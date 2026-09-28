@@ -25,6 +25,8 @@ export function useEventStream(branchId: string | null, handlers: SSEHandlers) {
       "moderator_alert",
       "branch_created",
       "conclusion",
+      "execution_start",
+      "execution_result",
       "done",
       "error",
     ];

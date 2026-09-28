@@ -50,6 +50,10 @@ async def _ensure_columns(conn) -> None:
                 out.append("ALTER TABLE projects ADD COLUMN project_context TEXT")
             if "context_status" not in cols:
                 out.append("ALTER TABLE projects ADD COLUMN context_status VARCHAR(32) DEFAULT 'none'")
+            if "run_command" not in cols:
+                out.append("ALTER TABLE projects ADD COLUMN run_command VARCHAR(1024)")
+            if "test_command" not in cols:
+                out.append("ALTER TABLE projects ADD COLUMN test_command VARCHAR(1024)")
         return out
 
     stmts = await conn.run_sync(lambda c: _sync(inspect(c)))

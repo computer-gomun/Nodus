@@ -181,6 +181,7 @@ async def read_project_file(project_id: str, path: str, db: AsyncSession = Depen
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.execution import Execution
     from app.models.graph import GraphEdge, GraphNode
 
     project = await db.get(Project, project_id)
@@ -189,6 +190,7 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     branch_ids = [
         b.id for b in (await db.execute(select(Branch).where(Branch.project_id == project_id))).scalars().all()
     ]
+    await db.execute(delete(Execution).where(Execution.project_id == project_id))
     if branch_ids:
         await db.execute(delete(Message).where(Message.branch_id.in_(branch_ids)))
         await db.execute(delete(GraphNode).where(GraphNode.branch_id.in_(branch_ids)))

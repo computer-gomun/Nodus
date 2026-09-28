@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
 import ChatPane from "./chat/ChatPane";
 import AnalysisPanel from "./components/AnalysisPanel";
+import ExecutionPanel from "./components/ExecutionPanel";
 import NodePanel from "./components/NodePanel";
 import ThemeToggle from "./components/ThemeToggle";
 import GraphView from "./graph/GraphView";
@@ -12,6 +13,8 @@ import type {
   BranchInfo,
   ChatMessage,
   Discussion,
+  ExecutionConfig,
+  ExecutionRun,
   ModeratorAlert,
   Project,
   ProjectContextInfo,
@@ -38,6 +41,10 @@ export default function App() {
   const [analysis, setAnalysis] = useState<AnalysisProgress | null>(null);
   const [contextInfo, setContextInfo] = useState<ProjectContextInfo | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [execConfig, setExecConfig] = useState<ExecutionConfig | null>(null);
+  const [executions, setExecutions] = useState<ExecutionRun[]>([]);
+  const [execRunning, setExecRunning] = useState(false);
+  const [showExecution, setShowExecution] = useState(false);
 
   const branchId = discussion?.id ?? null;
   const running = discussion?.is_running || thinking !== null || busy;
@@ -128,6 +135,47 @@ export default function App() {
     };
   }, [project?.id, project?.context_status]);
 
+  // Execution: which commands this project can run (user-set or auto-detected).
+  useEffect(() => {
+    const id = project?.project_path ? project.id : null;
+    if (!id) {
+      setExecConfig(null);
+      return;
+    }
+    let alive = true;
+    api
+      .getExecutionConfig(id)
+      .then((c) => {
+        if (alive) setExecConfig(c);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [project?.id, project?.project_path]);
+
+  // Execution history follows the open branch.
+  useEffect(() => {
+    const id = discussion?.id;
+    if (!id) {
+      setExecutions([]);
+      setExecRunning(false);
+      return;
+    }
+    let alive = true;
+    api
+      .listExecutions(id)
+      .then((r) => {
+        if (!alive) return;
+        setExecutions(r.executions);
+        setExecRunning(r.is_running);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [discussion?.id]);
+
   useEventStream(branchId, {
     onToken: useCallback((agentId: string, token: string) => {
       setStreaming((s) => ({ agentId, agentName: s?.agentName, text: (s?.text ?? "") + token }));
@@ -183,6 +231,29 @@ export default function App() {
           setStreaming(null);
           setThinking(null);
           setConcluding(false);
+        } else if (event === "execution_start") {
+          setExecRunning(true);
+          setThinking(null);
+        } else if (event === "execution_result") {
+          const m = d.message as ChatMessage | undefined;
+          const g = d.graph as Discussion["graph"] | undefined;
+          setExecRunning(false);
+          if (m) {
+            setDiscussion((prev) =>
+              prev && !prev.messages.some((x) => x.id === m.id)
+                ? { ...prev, messages: [...prev.messages, m], graph: g ?? prev.graph }
+                : prev
+            );
+          }
+          if (branchId) {
+            api
+              .listExecutions(branchId)
+              .then((r) => {
+                setExecutions(r.executions);
+                setExecRunning(r.is_running);
+              })
+              .catch(() => {});
+          }
         } else if (event === "done") {
           setThinking(null);
           setStreaming(null);
@@ -304,6 +375,30 @@ export default function App() {
       setConcluding(false);
     } catch (e) {
       setError(`토론을 열지 못했습니다: ${e}`);
+    }
+  };
+
+  const runCode = async (kind: "run" | "test", command?: string) => {
+    if (!discussion) return;
+    setError(null);
+    try {
+      await api.runCode(discussion.id, kind, command);
+      setExecRunning(true);
+    } catch (e) {
+      setError(`코드 실행 실패: ${e}`);
+    }
+  };
+
+  const saveExecutionConfig = async (runCommand: string, testCommand: string) => {
+    if (!project) return;
+    try {
+      const cfg = await api.updateExecutionConfig(project.id, {
+        run_command: runCommand,
+        test_command: testCommand,
+      });
+      setExecConfig(cfg);
+    } catch (e) {
+      setError(`실행 설정 저장 실패: ${e}`);
     }
   };
 
@@ -488,6 +583,27 @@ export default function App() {
               >
                 {concluding ? "결론 정리 중…" : "결론 내리기"}
               </button>
+              {project.project_path && (
+                <>
+                  <button
+                    onClick={() => runCode("test")}
+                    disabled={execRunning}
+                    title="프로젝트의 테스트 명령을 격리된 샌드박스에서 실행하고 결과를 토론에 넣습니다"
+                  >
+                    {execRunning ? "실행 중…" : "🧪 테스트 실행"}
+                  </button>
+                  <button
+                    onClick={() => runCode("run")}
+                    disabled={execRunning}
+                    title="프로젝트의 실행 명령을 격리된 샌드박스에서 실행하고 결과를 토론에 넣습니다"
+                  >
+                    ▶ 코드 실행
+                  </button>
+                  <button className="linkish" onClick={() => setShowExecution(true)} title="실행/테스트 명령과 실행 기록">
+                    실행 설정
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="composer">
@@ -539,6 +655,17 @@ export default function App() {
           context={contextInfo}
           status={project.context_status ?? "none"}
           onClose={() => setShowAnalysis(false)}
+        />
+      )}
+      {showExecution && (
+        <ExecutionPanel
+          config={execConfig}
+          executions={executions}
+          running={execRunning}
+          busy={busy}
+          onClose={() => setShowExecution(false)}
+          onSave={saveExecutionConfig}
+          onRun={runCode}
         />
       )}
       {showNew && <SettingsModal onClose={() => setShowNew(false)} onCreate={createProject} />}

@@ -10,6 +10,7 @@ const EDGE_COLOR: Record<string, string> = {
   derives_from: "var(--edge-derives_from)",
   related_to: "var(--edge-related_to)",
   duplicates: "var(--edge-duplicates)",
+  verifies: "var(--edge-verifies)",
 };
 
 /** Simple layered layout: BFS depth from roots, spread horizontally. */

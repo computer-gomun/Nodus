@@ -73,7 +73,7 @@ export interface BranchInfo {
 
 export interface ChatMessage {
   id: string;
-  role: "agent" | "user" | "moderator" | "conclusion";
+  role: "agent" | "user" | "moderator" | "conclusion" | "execution";
   agent_id?: string | null;
   agent_name?: string | null;
   content: string;
@@ -81,9 +81,59 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface ExecutionRun {
+  id: string;
+  project_id: string;
+  branch_id: string | null;
+  kind: "run" | "test" | "custom";
+  kind_label: string;
+  command: string;
+  image: string;
+  status: "ok" | "failed" | "timeout" | "error" | "unavailable";
+  status_label: string;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+  timed_out: boolean;
+  duration_ms: number;
+  requested_by: "user" | "agent";
+  message_id: string | null;
+  detail: string;
+  created_at: string;
+}
+
+export interface DetectedCommand {
+  kind: "run" | "test";
+  command: string;
+  image: string;
+  reason: string;
+  confidence: string;
+}
+
+export interface SandboxInfo {
+  enabled: boolean;
+  driver: string;
+  available: boolean;
+  image: string;
+  network: string;
+  writable: boolean;
+  timeout_sec: number;
+  agent_commands: boolean;
+  detail: string;
+}
+
+export interface ExecutionConfig {
+  project_path: string | null;
+  configured: { run_command: string; test_command: string };
+  detected: DetectedCommand[];
+  sandbox: SandboxInfo;
+  can_run: boolean;
+}
+
 export interface GraphNode {
   id: string;
-  type: "idea" | "question" | "objection" | "problem" | "decision" | "conclusion";
+  type: "idea" | "question" | "objection" | "problem" | "decision" | "conclusion" | "evidence";
   label: string;
   description: string;
   status: string;
@@ -128,6 +178,7 @@ export const NODE_TYPE_LABEL: Record<string, string> = {
   problem: "문제",
   decision: "결정",
   conclusion: "정리",
+  evidence: "실행 근거",
 };
 
 export const EDGE_TYPE_LABEL: Record<string, string> = {
@@ -137,6 +188,7 @@ export const EDGE_TYPE_LABEL: Record<string, string> = {
   derives_from: "파생",
   related_to: "연관",
   duplicates: "중복",
+  verifies: "검증",
 };
 
 export const NODE_STATUS_LABEL: Record<string, string> = {

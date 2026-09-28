@@ -8,7 +8,7 @@ import random
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import agents_for_count, debate_system_prompt
+from app.agents.base import agents_for_count, continuation_prompt, debate_system_prompt
 from app.agents.conclusion import stream_conclusion
 from app.agents.moderator import observe
 from app.agents.scheduler import pick_next_agent
@@ -16,6 +16,9 @@ from app.api.stream_bus import publish
 from app.branching.manager import build_context
 from app.config import settings
 from app.database import SessionLocal
+from app.execution import manager as execution_service
+from app.execution import sandbox
+from app.execution.requests import extract_run_requests
 from app.graph.extractor import extract_snapshot
 from app.graph.manager import get_graph, merge_snapshot, upsert_conclusion
 from app.llm.router import get_provider, model_for
@@ -83,6 +86,23 @@ async def _run(branch_id: str, turns: int) -> None:
                 await publish(branch_id, "error", {"message": "프로젝트 폴더 분석이 실패해 프로젝트 맥락 없이 진행합니다"})
         project_ctx_text = load_context_text(project) if project else ""
 
+        # Can this branch actually run code? One probe per run, never per turn.
+        exec_available = False
+        if project and project.project_path and settings.sandbox_enabled:
+            try:
+                exec_available = await sandbox.available()
+            except Exception:
+                exec_available = False
+        if project and project.project_path and not exec_available:
+            await publish(
+                branch_id,
+                "error",
+                {
+                    "message": "샌드박스(Docker)를 쓸 수 없어 코드 실행 없이 토론합니다. "
+                    "실행 결과 없이 진행되며, 실행을 요청한 발언은 무시됩니다."
+                },
+            )
+
         branch.status = "running"
         await session.commit()
 
@@ -120,21 +140,30 @@ async def _run(branch_id: str, turns: int) -> None:
                 )
             ).scalars().all()
             graph = await get_graph(session, branch_id)
-            ctx = build_context(topic, branch, list(msgs), project_context=project_ctx_text)
+            recent_execs = (
+                await execution_service.recent_executions(session, branch_id) if exec_available else []
+            )
+            ctx = build_context(
+                topic,
+                branch,
+                list(msgs),
+                project_context=project_ctx_text,
+                execution_context=execution_service.render_context(recent_execs),
+                executions_available=exec_available,
+            )
             # ctx[0] = topic/branch system; prepend persona system, keep conversation tail
             graph_line = "; ".join(n["label"] for n in graph["nodes"][-10:])
             ctx = [
                 ctx[0],  # system: topic + fork context
-                {"role": "system", "content": debate_system_prompt(agent, topic)},
+                {
+                    "role": "system",
+                    "content": debate_system_prompt(agent, topic, execution_available=exec_available),
+                },
                 *ctx[1:],
                 {
                     "role": "user",
-                    "content": (
-                        f"Stay on topic: {topic}\n"
-                        + ("Idea-graph so far: " + graph_line + "\n" if graph_line else "")
-                        + f"Continue the debate as {agent.name}. Respond in Korean using plain everyday words "
-                        "(no jargon, no buzzwords), blunt and provocative, no politeness. One focused move that "
-                        "narrows the answer to the topic — rebut only where it matters, don't nitpick everything."
+                    "content": continuation_prompt(
+                        agent, topic, graph_line, execution_available=exec_available
                     ),
                 },
             ]
@@ -173,6 +202,14 @@ async def _run(branch_id: str, turns: int) -> None:
                         stripped = True
                 if not stripped:
                     break
+
+            # Agent-requested verification: `@test` / `@run <cmd>` on its own line.
+            # The marker is a control token, never part of what the agent said.
+            run_requests, content = extract_run_requests(content)
+            if run_requests and not (exec_available and settings.sandbox_agent_commands):
+                run_requests = []
+                content = (content + "\n\n(실행 요청은 지금 쓸 수 없어 실행하지 않았습니다.)").strip()
+
             if not content:
                 await publish(branch_id, "error", {"message": f"{agent.name} 빈 답변을 반환해 건너뜁니다"})
                 continue
@@ -205,6 +242,18 @@ async def _run(branch_id: str, turns: int) -> None:
             await publish(
                 branch_id, "turn_complete", {"turn": branch.ai_turn_count, "max_turns": branch.max_turns}
             )
+
+            # Verify what the agent claimed, before the next agent speaks: the result
+            # lands in the conversation as real evidence for the following turns.
+            if run_requests:
+                kind, cmd = run_requests[0]
+                try:
+                    await execution_service.run_for_branch(
+                        session, branch, kind=kind, command=cmd, requested_by="agent"
+                    )
+                except Exception as e:
+                    await session.rollback()
+                    await publish(branch_id, "error", {"message": f"코드 실행을 건너뜁니다: {e}"})
 
             # Moderator (silent; publishes only on trigger)
             all_texts = [m.content for m in list(msgs) + [msg] if m.role in ("agent", "user", "conclusion")]
@@ -291,9 +340,12 @@ async def _write_conclusion(
     msgs = (
         await session.execute(select(Message).where(Message.branch_id == branch_id).order_by(Message.created_at))
     ).scalars().all()
-    texts = [
-        f"{m.agent_name or '나'}: {m.content}" for m in msgs if m.role in ("agent", "user", "conclusion")
-    ]
+    texts: list[str] = []
+    for m in msgs:
+        if m.role == "execution":
+            texts.append(m.content)  # real run output: evidence, not an opinion
+        elif m.role in ("agent", "user", "conclusion"):
+            texts.append(f"{m.agent_name or '나'}: {m.content}")
     graph = await get_graph(session, branch_id)
 
     await publish(branch_id, "agent_start", {"agent_id": "conclusion", "agent_name": "결론"})

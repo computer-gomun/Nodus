@@ -31,6 +31,9 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
 - 라이트/다크 테마: 기본은 OS 설정을 따르고, 상단바에서 전환하며, 브라우저별로 기억
 - 프로젝트 폴더 분석 과정 표시: 폴더 스캔 → 중요 파일 선정 → 파일 읽기 → 맥락 생성
   단계와 실시간 진행 상황(파일 수·읽은 양·선정된 파일 목록)을 패널에서 확인
+- 코드 실행으로 주장 검증: 지정하거나 자동 감지한 실행/테스트 명령을 **격리된 Docker 컨테이너**에서
+  돌리고 stdout·stderr·exit code를 토론에 넘깁니다. 에이전트는 `@test`/`@run`으로 스스로 검증을
+  요청할 수 있고, 결과는 실행 근거(`evidence`) 노드로 아이디어 지도에 붙습니다.
 - 노드 상세 패널 탭 전환: "이 아이디어 발언" ↔ "전체 대화"(근거 발언은 강조 표시)
 
 ## 구조
@@ -42,6 +45,7 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
    ├── 토론 엔진 → 스케줄러 → LLM 프로바이더 (OpenAI 호환 / mock)
    ├── 진행 도우미 (휴리스틱 + LLM, 조건이 걸릴 때만 발화)
    ├── 그래프 추출기 (구조화 JSON) → 그래프 매니저 (점진적 병합)
+   ├── 실행 샌드박스 (명령 감지 → Docker 격리 실행 → 증거 노드)
    └── 분기 매니저 (+ 맥락 빌더) → PostgreSQL
 ```
 
@@ -94,6 +98,9 @@ npm install
 npm run dev                                       # http://localhost:5173
 ```
 
+> 코드 실행(샌드박스)은 **Docker가 필요**합니다. Docker가 없으면 실행/테스트 버튼만 막히고
+> 토론·아이디어 지도·분기는 그대로 동작합니다. 호스트에서 프로젝트 코드를 직접 돌리는 폴백은 없습니다.
+
 ## 환경 변수
 
 | 변수 | 의미 | 기본값 |
@@ -104,6 +111,14 @@ npm run dev                                       # http://localhost:5173
 | `LLM_MODEL` | 기본 모델 | `gpt-4o-mini` |
 | `LLM_DEBATE_MODEL` / `LLM_GRAPH_MODEL` / `LLM_MODERATOR_MODEL` | 역할별 오버라이드 | `LLM_MODEL`로 폴백 |
 | `CORS_ORIGINS` | 허용할 프론트엔드 오리진 | localhost 개발 포트 |
+| `SANDBOX_ENABLED` | 코드 실행 기능 사용 | `true` |
+| `SANDBOX_IMAGE` / `SANDBOX_DEFAULT_IMAGE` | 실행 컨테이너 이미지(비우면 스택에서 자동 감지) | 자동 감지 / `python:3.12-slim` |
+| `SANDBOX_NETWORK` | 실행 컨테이너 네트워크 | `none` |
+| `SANDBOX_MEMORY` / `SANDBOX_CPUS` / `SANDBOX_PIDS_LIMIT` | 자원 상한 | `1g` / `1.0` / `256` |
+| `SANDBOX_WRITABLE` | 프로젝트 폴더를 쓰기 가능으로 마운트 | `false`(읽기 전용) |
+| `SANDBOX_TIMEOUT_SEC` | 실행 제한 시간(초과 시 컨테이너 강제 제거) | `120` |
+| `SANDBOX_AGENT_COMMANDS` | 에이전트의 `@test`/`@run` 요청 허용 | `true` |
+| `SANDBOX_MOUNT_SOURCE` | (백엔드가 컨테이너일 때) Docker 데몬이 보는 폴더 경로 | "" |
 
 ## 토론은 이렇게 돌아갑니다
 
@@ -112,9 +127,10 @@ npm run dev                                       # http://localhost:5173
 - 매 턴: 스케줄러가 발언자를 고르고(연속 발언은 감점, 아직 말하지 않은 쪽은 우대) →
   에이전트가 SSE로 토큰을 스트리밍 → 메시지가 턴 번호와 함께 저장됩니다.
 - 에이전트 시스템 프롬프트에는 *성향*(아이디어 제시, 비판, 대안, 실현 가능성, 엉뚱한 발상)과 진행 규칙
-  (매 발언은 원래 질문에 대한 답을 좁히기, 반박은 결론이 흔들리는 지점에서만)과 말투 규칙(아주 쉬운 한국어,
-  짧은 문장, 전문용어·영어 약어·비즈니스 유행어 금지, 건방지고 도발적인 반말 — 욕설·혐오 표현은 금지)만
-  담깁니다 — 대본이나 순서는 결코 넣지 않습니다.
+  (가능성을 넓히고 각 선택지의 근거와 문제점을 드러내기, 결론을 서두르지 않기, 반박은 판단이 흔들리는
+  지점에서만, 실행으로 확인할 수 있는 주장은 `@test`/`@run`으로 실제 실행해 검증)과 말투 규칙(아주 쉬운 한국어,
+  짧은 문장, 전문용어·영어 약어·비즈니스 유행어 금지, 건방지고 도발적인 반말 — 욕설·혐오 표현은 금지, 공격은
+  사람이 아니라 주장에만)만 담깁니다 — 대본이나 순서, "한 가지 움직임만 하라" 같은 인위적 제한은 결코 넣지 않습니다.
 - 토론을 언제 끝낼지는 자동으로 판단하지 않습니다. 사람이 "결론 내리기"를 누르면 진행 중인 토론은
   현재 발언이 끝나는 즉시, 멈춰 있는 토론은 바로 결론을 냅니다.
 
@@ -137,8 +153,9 @@ npm run dev                                       # http://localhost:5173
 - 출력은 Pydantic(`GraphSnapshot`)으로 검증하고, 실패하면 재시도한 뒤 복구 파싱합니다.
 - 병합은 점진적입니다: 일치하는 노드(id로 먼저, 그다음 label로)는 갱신하고 엣지는 추가하며,
   무엇도 삭제하지 않습니다 — 뒤처진 아이디어는 `refined`/`merged`/`dropped`가 됩니다.
-- 노드 타입: `idea question objection problem decision conclusion`.
-  엣지 타입: `supports contradicts refines derives_from related_to duplicates`.
+- 노드 타입: `idea question objection problem decision conclusion evidence`.
+  엣지 타입: `supports contradicts refines derives_from related_to duplicates verifies`.
+  (`evidence`와 `verifies`는 실제 코드 실행 결과를 근거로 붙습니다. 아래 "코드 실행" 참고.)
 
 ## 분기는 이렇게 동작합니다
 
@@ -148,6 +165,34 @@ npm run dev                                       # http://localhost:5173
   부모는 절대 수정되지 않습니다.
 - 가지는 임의로 중첩됩니다(`Main → A → A-1 …`). 각 가지는 자체 턴 카운터와 스냅샷으로
   독립적으로 토론하며, 가지 칩으로 전환합니다.
+
+## 코드는 이렇게 실행됩니다
+
+"구현 가능하다"는 주장은 말로만 두지 않고, 실제로 돌려서 확인합니다.
+
+- **격리 실행**: 모든 명령은 일회용 Docker 컨테이너 안에서 돕니다. 네트워크는 기본 `none`,
+  capability 전부 제거(`--cap-drop ALL`), `no-new-privileges`, 메모리·CPU·PID 상한, 컨테이너
+  파일시스템은 일회용입니다. 프로젝트 폴더는 기본 **읽기 전용**으로 붙습니다.
+- **호스트 실행 경로는 없습니다.** Docker를 쓸 수 없으면 실행을 거부합니다 — 사용자 PC에서
+  프로젝트 코드를 직접 돌리는 폴백은 의도적으로 구현하지 않았습니다.
+- **명령 지정 또는 자동 감지**: `package.json` 스크립트, `pyproject.toml`/`pytest.ini`/`tests/`,
+  `go.mod`, `Cargo.toml`, `pom.xml`/`build.gradle`, `Makefile`을 보고 실행/테스트 명령과
+  기본 이미지를 추정합니다. 상단 "실행 설정"에서 직접 지정할 수도 있습니다(지정이 우선).
+- **stdout · stderr · exit code 수집**: 실행마다 원문을 저장하고, 시간 초과면 컨테이너를 강제 제거합니다.
+- **토론 컨텍스트 주입**: 결과는 `[실행 결과]` 메시지로 대화에 남고, 이후 모든 발언자의 프롬프트에
+  `[실행 결과 기록]` 블록으로 들어갑니다.
+- **에이전트가 스스로 검증 요청**: 발언 맨 끝에 자기 줄로 `@test` 또는 `@run <명령>`을 적으면
+  엔진이 그 줄을 걷어내고 실제로 실행한 뒤, 결과를 다음 발언 전에 대화에 넣습니다.
+  결과를 본 적 없는 에이전트가 "해봤다"고 말하지 못하도록 프롬프트가 그렇게 지시합니다.
+- **아이디어 지도의 근거**: 실행마다 `evidence` 노드가 생기고(source = 실행 결과 메시지),
+  다음 지도 갱신 때 주장 노드와 `verifies` 엣지로 연결됩니다. 실패한 실행도 반증 근거로 남습니다.
+- **결론에서도 반영**: 결론 1단계 분석과 최종 결론 모두 `[실행 결과]`와 모순되는 주장을
+  합의로 올리지 않습니다.
+- API 키 없이 도는 오프라인 mock 모드에서도 실행 기능은 그대로 동작합니다(Docker만 필요).
+
+> 실행 컨테이너 이미지에는 프로젝트 의존성이 미리 설치돼 있어야 합니다(네트워크 기본 차단).
+> 직접 만든 이미지를 `SANDBOX_IMAGE`로 지정하거나, 허용된 환경에서 `SANDBOX_NETWORK=bridge`로 열고
+> 실행 명령 앞에 설치 단계를 넣으세요. 예: `pip install -r requirements.txt && python -m pytest -q`
 
 ## API (요약)
 
@@ -165,6 +210,10 @@ GET  /api/discussions/{id}/stream         SSE 이벤트 스트림
 GET  /api/discussions/{id}/graph          현재 그래프
 POST /api/discussions/{id}/branches       노드에서 분기
 POST /api/discussions/{id}/restart        처음부터 다시 시작 (기록·지도 삭제)
+POST /api/discussions/{id}/run            코드 실행/테스트 (격리 샌드박스, SSE로 진행)
+GET  /api/discussions/{id}/executions     이 토론의 실행 기록
+GET  /api/projects/{id}/execution         실행 설정 + 자동 감지된 명령 + 샌드박스 상태
+PUT  /api/projects/{id}/execution         실행/테스트 명령 지정
 GET  /api/branches/{id}                   가지 상세
 GET  /api/health                          헬스 + LLM 상태
 ```
@@ -172,4 +221,4 @@ GET  /api/health                          헬스 + LLM 상태
 ## 프로젝트 구조
 
 `frontend/src`(`components/ graph/ chat/ settings/ api/ hooks/ types/`)와
-`backend/app`(`api/ agents/ graph/ branching/ llm/ models/`)를 참고하세요.
+`backend/app`(`api/ agents/ graph/ branching/ execution/ project/ llm/ models/`)를 참고하세요.

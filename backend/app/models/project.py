@@ -25,5 +25,8 @@ class Project(Base):
     project_path: Mapped[str | None] = mapped_column(String(1024), nullable=True, default=None)
     project_context: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     context_status: Mapped[str] = mapped_column(String(32), default="none")  # none|analyzing|done|failed
+    # Sandboxed execution: user-specified commands. Empty = auto-detect from the folder.
+    run_command: Mapped[str | None] = mapped_column(String(1024), nullable=True, default=None)
+    test_command: Mapped[str | None] = mapped_column(String(1024), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

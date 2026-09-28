@@ -12,7 +12,7 @@ class Message(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("msg_"))
     branch_id: Mapped[str] = mapped_column(String(64), ForeignKey("branches.id"), index=True)
-    role: Mapped[str] = mapped_column(String(32))  # agent | user | moderator
+    role: Mapped[str] = mapped_column(String(32))  # agent | user | moderator | conclusion | execution
     agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     agent_name: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     content: Mapped[str] = mapped_column(Text)

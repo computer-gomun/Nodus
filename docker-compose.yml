@@ -18,6 +18,10 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000
     ports:
       - "8000:8000"
+    volumes:
+      # Sandboxed code execution: the backend asks the host daemon for a
+      # disposable container. Remove this line to disable execution entirely.
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - postgres
 

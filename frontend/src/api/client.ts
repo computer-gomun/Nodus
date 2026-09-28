@@ -3,6 +3,8 @@ import type {
   BranchInfo,
   ChatMessage,
   Discussion,
+  ExecutionConfig,
+  ExecutionRun,
   GraphEdge,
   GraphNode,
   Project,
@@ -78,7 +80,21 @@ export const api = {
     }),
   restartDiscussion: (id: string) =>
     req<Discussion>(`/api/discussions/${id}/restart`, { method: "POST" }),
+  getExecutionConfig: (projectId: string) =>
+    req<ExecutionConfig>(`/api/projects/${projectId}/execution`),
+  updateExecutionConfig: (projectId: string, body: { run_command: string; test_command: string }) =>
+    req<ExecutionConfig>(`/api/projects/${projectId}/execution`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  listExecutions: (branchId: string) =>
+    req<{ is_running: boolean; executions: ExecutionRun[] }>(`/api/discussions/${branchId}/executions`),
+  runCode: (branchId: string, kind: "run" | "test", command?: string) =>
+    req<{ status: string }>(`/api/discussions/${branchId}/run`, {
+      method: "POST",
+      body: JSON.stringify({ kind, command }),
+    }),
   streamUrl: (id: string) => `${BASE}/api/discussions/${id}/stream`,
 };
 
-export type { BranchInfo, ChatMessage, Discussion, GraphEdge, GraphNode, Project };
+export type { BranchInfo, ChatMessage, Discussion, ExecutionConfig, ExecutionRun, GraphEdge, GraphNode, Project };

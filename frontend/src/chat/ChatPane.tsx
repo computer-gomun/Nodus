@@ -29,12 +29,14 @@ export default function ChatPane({
               <span className="badge">진행 도우미</span>
             ) : m.role === "conclusion" ? (
               <span className="badge badge-conclusion">결론</span>
+            ) : m.role === "execution" ? (
+              <span className="badge badge-execution">코드 실행</span>
             ) : (
               <span className={`badge agent-${m.agent_id ?? ""}`}>{m.agent_name || "AI"}</span>
             )}
             {m.turn != null && <span className="turn">{m.turn}번째 발언</span>}
           </div>
-          <div className="body">{m.content}</div>
+          <div className={`body${m.role === "execution" ? " exec" : ""}`}>{m.content}</div>
         </div>
       ))}
       {thinkingAgent && !streaming && <div className="thinking">{thinkingAgent} 생각 중…</div>}

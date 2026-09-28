@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.graph.manager import clone_graph
 from app.models.branch import Branch
+from app.models.execution import Execution
 from app.models.graph import GraphEdge, GraphNode
 from app.models.message import Message
 
@@ -125,6 +126,7 @@ async def reset_discussion(session: AsyncSession, branch: Branch) -> None:
     The branch row itself (name, settings, id) is kept; callers own its status.
     """
     await session.execute(delete(Message).where(Message.branch_id == branch.id))
+    await session.execute(delete(Execution).where(Execution.branch_id == branch.id))
     await session.execute(delete(GraphEdge).where(GraphEdge.branch_id == branch.id))
     await session.execute(delete(GraphNode).where(GraphNode.branch_id == branch.id))
     branch.ai_turn_count = 0
@@ -139,6 +141,8 @@ def build_context(
     open_questions: list[str] | None = None,
     project_context: str = "",
     max_messages: int = 30,
+    execution_context: str = "",
+    executions_available: bool = False,
 ) -> list[dict[str, str]]:
     """Assemble LLM context. Structured for future compression (summarize old tail)."""
     sys = ""
@@ -153,6 +157,14 @@ def build_context(
         f"분기: {branch.name} ({branch.fork_turn}번 발언에서 갈라짐). "
         "분기 지점의 사고 흐름을 이어가고, 처음부터 다시 시작하지 마세요.\n"
     )
+    if executions_available:
+        sys += (
+            "코드 실행: 이 프로젝트의 코드를 격리된 샌드박스에서 실제로 돌려볼 수 있다. "
+            "실행으로 확인할 수 있는 주장을 하려면 발언 맨 끝에 자기 줄로 `@test` 또는 "
+            "`@run <명령>`을 적어라. 결과는 [실행 결과]로 돌아온다.\n"
+        )
+    if execution_context:
+        sys += f"\n{execution_context}\n"
     if graph_summary:
         sys += f"Current idea-graph summary: {graph_summary[:600]}\n"
     if open_questions:
@@ -165,6 +177,9 @@ def build_context(
             out.append({"role": "user", "content": f"[User] {m.content}"})
         elif m.role == "moderator":
             out.append({"role": "user", "content": f"[Moderator note] {m.content}"})
+        elif m.role == "execution":
+            # Real sandbox output: observed fact, not something an agent said.
+            out.append({"role": "user", "content": m.content})
         else:
             out.append({"role": "assistant", "content": f"[{m.agent_name}] {m.content}"})
     return out

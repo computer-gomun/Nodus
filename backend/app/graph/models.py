@@ -6,8 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-NodeType = Literal["idea", "question", "objection", "problem", "decision", "conclusion"]
-EdgeType = Literal["supports", "contradicts", "refines", "derives_from", "related_to", "duplicates"]
+NodeType = Literal["idea", "question", "objection", "problem", "decision", "conclusion", "evidence"]
+EdgeType = Literal[
+    "supports", "contradicts", "refines", "derives_from", "related_to", "duplicates", "verifies"
+]
 NodeStatus = Literal["active", "refined", "merged", "dropped"]
 
 
@@ -46,7 +48,15 @@ GRAPH_JSON_SCHEMA: dict = {
                     "id": {"type": "string"},
                     "type": {
                         "type": "string",
-                        "enum": ["idea", "question", "objection", "problem", "decision", "conclusion"],
+                        "enum": [
+                            "idea",
+                            "question",
+                            "objection",
+                            "problem",
+                            "decision",
+                            "conclusion",
+                            "evidence",
+                        ],
                     },
                     "label": {"type": "string"},
                     "description": {"type": "string"},
@@ -66,7 +76,15 @@ GRAPH_JSON_SCHEMA: dict = {
                     "target": {"type": "string"},
                     "type": {
                         "type": "string",
-                        "enum": ["supports", "contradicts", "refines", "derives_from", "related_to", "duplicates"],
+                        "enum": [
+                            "supports",
+                            "contradicts",
+                            "refines",
+                            "derives_from",
+                            "related_to",
+                            "duplicates",
+                            "verifies",
+                        ],
                     },
                 },
                 "required": ["source", "target", "type"],

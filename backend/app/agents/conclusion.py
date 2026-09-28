@@ -28,6 +28,8 @@ ANALYSIS_SYSTEM = (
     "- A claim mentioned once and never confirmed is NOT agreed.\n"
     "- A proposal nobody agreed on belongs in proposals, never in agreed.\n"
     "- A claim repeated over and over but rebutted every time belongs in rebutted, not agreed.\n"
+    "- Lines starting with '[실행 결과]' are real sandbox run output, not opinions. A claim those runs "
+    "contradict belongs in rebutted even if nobody argued against it.\n"
     "- Use an empty array when a category does not apply. Output no text outside the JSON."
 )
 
@@ -58,6 +60,8 @@ CONCLUSION_SYSTEM = (
     "- Never let the last message decide. Speaking last or sounding persuasive is not agreement.\n"
     "- Proposals ('~하자' 류 아이디어) are 제안, not results. Write them as results only if the participants agreed.\n"
     "- Where claims collide, write '의견이 갈렸다' instead of picking a winner.\n"
+    "- Lines starting with '[실행 결과]' are real sandbox run output. A claim the actual runs contradict is "
+    "not a result, no matter who said it or how often.\n"
     "- Use ONLY what the conversation and the idea graph contain. Never add facts, numbers, analogies, or new arguments.\n"
     "- 담백한 평문으로 쓰세요. 마크다운 장식(**, #) 금지, 놀리거나 건방진 말투 금지.\n"
     "- Absolutely never: swap the original question for another criterion, present a rebutted claim as agreed, "

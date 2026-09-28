@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import branches, discussions, fs, projects, stream
+from app.api import branches, discussions, execution, fs, projects, stream
 from app.config import settings
 from app.database import init_db
 
@@ -37,6 +37,7 @@ app.include_router(discussions.router)
 app.include_router(branches.router)
 app.include_router(stream.router)
 app.include_router(fs.router)
+app.include_router(execution.router)
 
 
 @app.get("/api/health")

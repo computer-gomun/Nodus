@@ -129,6 +129,41 @@ async def upsert_conclusion(
     return await get_graph(session, branch_id)
 
 
+async def upsert_evidence(
+    session: AsyncSession,
+    branch_id: str,
+    *,
+    execution_id: str,
+    label: str,
+    description: str,
+    source_messages: list[str],
+) -> dict:
+    """Record a sandbox run as an `evidence` node (stable id per execution)."""
+    node_id = f"node_ev_{execution_id}"
+    node = await session.get(GraphNode, node_id)
+    sources = json.dumps(source_messages, ensure_ascii=False)
+    if node is None:
+        session.add(
+            GraphNode(
+                id=node_id,
+                branch_id=branch_id,
+                type="evidence",
+                label=label[:120],
+                description=description[:500],
+                status="active",
+                source_messages=sources,
+            )
+        )
+    else:
+        node.type = "evidence"
+        node.label = label[:120]
+        node.description = description[:500]
+        node.status = "active"
+        node.source_messages = sources
+    await session.flush()
+    return await get_graph(session, branch_id)
+
+
 async def clone_graph(session: AsyncSession, from_branch: str, to_branch: str) -> dict[str, str]:
     """Copy graph to a new branch with fresh ids (PK is global). Returns old->new id map."""
     nodes = (await session.execute(select(GraphNode).where(GraphNode.branch_id == from_branch))).scalars().all()

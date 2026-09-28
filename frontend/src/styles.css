@@ -37,12 +37,14 @@
   --node-problem: #b45309;
   --node-decision: #15803d;
   --node-conclusion: #6d28d9;
+  --node-evidence: #0f766e;
   --edge-supports: #15803d;
   --edge-contradicts: #b91c1c;
   --edge-refines: #2f6fed;
   --edge-derives_from: #6d28d9;
   --edge-related_to: #9ca3af;
   --edge-duplicates: #b45309;
+  --edge-verifies: #0f766e;
   --rf-control-bg: #fefefe;
   --rf-control-hover: #f4f4f4;
   --rf-control-ink: #000000;
@@ -95,12 +97,14 @@
   --node-problem: #e0a63c;
   --node-decision: #4cc27b;
   --node-conclusion: #a78bfa;
+  --node-evidence: #2dd4bf;
   --edge-supports: #4cc27b;
   --edge-contradicts: #f0776f;
   --edge-refines: #5b8cff;
   --edge-derives_from: #a78bfa;
   --edge-related_to: #6b7488;
   --edge-duplicates: #e0a63c;
+  --edge-verifies: #2dd4bf;
   --rf-control-bg: #22262f;
   --rf-control-hover: #2c313b;
   --rf-control-ink: #d5dae3;
@@ -145,9 +149,12 @@ body { margin: 0; font-family: "Pretendard", -apple-system, "Segoe UI", Roboto, 
 .msg.user { background: var(--accent-soft); border-color: var(--accent-line); }
 .msg.moderator { background: var(--warn-soft); border-color: var(--warn-line); }
 .msg.conclusion { background: var(--conclusion-soft); border-color: var(--conclusion-line); }
+.msg.execution { background: var(--panel-2); border-color: var(--node-evidence); }
+.msg .body.exec { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; max-height: 260px; overflow: auto; }
 .msg.streaming { border-style: dashed; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 20px; background: var(--badge-bg); color: var(--badge-ink); }
 .badge.badge-conclusion, .badge.agent-conclusion { background: var(--node-conclusion); color: var(--panel); }
+.badge.badge-execution { background: var(--node-evidence); color: var(--panel); }
 .badge.agent-A { background: var(--badge-a); } .badge.agent-B { background: var(--badge-b); }
 .badge.agent-C { background: var(--badge-c); } .badge.agent-D { background: var(--badge-d); }
 .badge.agent-E { background: var(--badge-e); }
@@ -178,6 +185,7 @@ button.linkish:hover { background: var(--panel-2); border-color: var(--line); co
 .node-idea { border-color: var(--node-idea); } .node-question { border-color: var(--node-question); }
 .node-objection { border-color: var(--node-objection); } .node-problem { border-color: var(--node-problem); }
 .node-decision { border-color: var(--node-decision); } .node-conclusion { border-color: var(--node-conclusion); }
+.node-evidence { border-color: var(--node-evidence); border-style: dashed; }
 
 /* React Flow ships light-only colors, several as SVG presentation attributes —
    these rules win over them and follow the active theme. */
@@ -220,6 +228,17 @@ button.linkish:hover { background: var(--panel-2); border-color: var(--line); co
 .imp { font-size: 10px; padding: 1px 6px; border-radius: 20px; background: var(--badge-bg); color: var(--badge-ink); }
 .imp-high { background: var(--accent-soft); color: var(--ink); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+
+.execution-modal { width: min(720px, 94vw); }
+.exec-row { border-bottom: 1px solid var(--line-soft); padding: 2px 0; }
+.exec-head { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; width: 100%; text-align: left; background: transparent; border-color: transparent; padding: 6px 4px; align-items: baseline; }
+.exec-head:hover { background: var(--panel-2); }
+.exec-head code { font-size: 12px; word-break: break-all; }
+.exec-meta { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+.exec-status { font-size: 10px; padding: 1px 6px; border-radius: 20px; background: var(--badge-bg); color: var(--badge-ink); white-space: nowrap; }
+.exec-status.ok { background: var(--accent-soft); color: var(--ink); }
+.exec-status.bad { background: var(--warn-soft); color: var(--warn); }
+.exec-out { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; margin: 4px 0 8px; }
 
 .alert { margin: 0 14px 8px; padding: 8px 12px; background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 8px; font-size: 13px; }
 
