@@ -52,7 +52,7 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
 ## 기술 스택
 
 프론트엔드: React, TypeScript, Vite, React Flow, 순수 CSS.
-백엔드: Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async), httpx, SSE.
+백엔드: Python 3.12 이상, FastAPI, Pydantic v2, SQLAlchemy 2 (async), httpx, SSE.
 인프라: Docker, Docker Compose, PostgreSQL 16.
 
 ## 실행하기
@@ -70,6 +70,9 @@ docker compose up --build
 
 `LLM_API_KEY`가 없으면 백엔드는 mock 모드로 돌아갑니다 — 네트워크 없이 전부 동작합니다.
 
+amd64와 arm64(라즈베리파이, 애플 실리콘 포함) 모두 같은 명령으로 빌드됩니다 —
+백엔드 이미지의 Docker CLI는 빌드 대상 아키텍처에 맞춰 내려받습니다.
+
 ### Windows 원클릭 (`run.bat`)
 
 백엔드 venv와 `frontend/node_modules`가 준비돼 있으면(아래 참고) `run.bat`을 더블클릭하세요.
@@ -77,13 +80,33 @@ docker compose up --build
 http://localhost:5173 을 엽니다. 그 창을 닫으면 둘 다 종료됩니다. 백엔드와 프론트엔드 로그는
 같은 창에 함께 출력됩니다.
 
+### Linux / macOS 원클릭 (`run.sh`)
+
+```bash
+./run.sh
+```
+
+`run.bat`과 같은 동작입니다: 백엔드 venv와 `frontend/node_modules`가 준비돼 있으면
+`run.sh`가 백엔드(:8000)를 백그라운드로 띄우고, 준비될 때까지 기다린 뒤 프론트엔드(:5173)를
+같은 터미널에서 실행합니다. 창을 닫거나 Ctrl+C를 누르면 둘 다 종료됩니다.
+(데스크톱 환경이면 브라우저를 자동으로 열고, 서버처럼 화면이 없으면 열지 않습니다.)
+
+한 번만 준비하면 되는 것:
+
+```bash
+cd backend && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt && cd ..
+cd frontend && npm install && cd ..
+```
+
 ### 로컬 개발
 
 백엔드:
 
 ```bash
 cd backend
-python -m venv .venv && .venv/Scripts/activate   # Windows
+python3 -m venv .venv
+source .venv/bin/activate                         # Linux / macOS
+# .venv\Scripts\activate                          # Windows
 pip install -r requirements.txt
 cp .env.example .env                              # 기본 sqlite라 그대로 동작합니다
 uvicorn app.main:app --reload
