@@ -27,7 +27,11 @@ def _drives() -> list[str]:
             if os.path.isdir(drive):
                 out.append(drive)
         return out or ["C:\\"]
-    return ["/"]
+    # POSIX (Linux/macOS): the home folder is the useful starting point; "/" stays available.
+    home = os.path.expanduser("~")
+    roots = [home] if home and os.path.isdir(home) else []
+    roots.append("/")
+    return roots
 
 
 def _safe_list(path: str, limit: int = 500) -> list[dict[str, str]]:
@@ -55,7 +59,7 @@ async def list_drives():
 
 @router.get("/browse")
 async def browse(path: str = ""):
-    path = (path or "").strip()
+    path = os.path.expanduser((path or "").strip())  # "~" works on Linux/macOS
     if not path:
         return {"path": "", "parent": None, "dirs": [{"name": d, "path": d} for d in _drives()]}
     if not os.path.isdir(path):
@@ -71,7 +75,7 @@ async def browse(path: str = ""):
 
 @router.post("/validate")
 async def validate(body: ValidateBody):
-    path = (body.path or "").strip()
+    path = os.path.expanduser((body.path or "").strip())
     if not path or not os.path.isdir(path):
         return {"ok": False}
     # rough file count (bounded) so the UI can preview the target

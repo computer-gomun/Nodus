@@ -41,7 +41,7 @@ def _iso(dt: datetime | None) -> str:
 
 @router.post("")
 async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    path = (body.project_path or "").strip().strip('"') or None
+    path = os.path.expanduser((body.project_path or "").strip().strip('"')) or None
     if path and not os.path.isdir(path):
         raise HTTPException(400, "프로젝트 폴더 경로가 존재하지 않습니다")
     project = Project(title=body.title.strip(), topic=body.topic.strip(), project_path=path)

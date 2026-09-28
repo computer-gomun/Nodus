@@ -1,7 +1,13 @@
 // Nodus E2E 검증 스크립트 — 모든 대기에는 타임아웃이 걸려 있어 무한루프가 없습니다.
 // 사용법: node scripts/e2e.mjs [--quick]   (--quick: 분석까지만, 토론 생략)
+//        분석 대상 폴더는 기본으로 이 저장소의 backend/ 를 쓰고, NODUS_TARGET 환경변수로 바꿀 수 있습니다.
 // 종료코드: 0=통과, 1=실패, 2=전체 제한시간 초과
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const BASE = process.env.NODUS_API || "http://localhost:8000";
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const TARGET = process.env.NODUS_TARGET || path.join(ROOT, "backend");
 const QUICK = process.argv.includes("--quick");
 const GLOBAL_MS = QUICK ? 240000 : 420000;
 const REQ_MS = 30000;
@@ -82,8 +88,8 @@ const check = (name, cond) => {
   });
   check("폴더 검증", v.ok === true);
 
-  // 3. 분석 E2E (Nodus backend 폴더를 대상으로)
-  const target = "C:\\Users\\yoonjaekoo\\Desktop\\Nodus\\backend";
+  // 3. 분석 E2E (기본: 이 저장소의 backend/ 폴더, NODUS_TARGET으로 변경)
+  const target = TARGET;
   const p = await req("/api/projects", {
     method: "POST",
     headers: { "content-type": "application/json" },
