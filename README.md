@@ -35,11 +35,14 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
   돌리고 stdout·stderr·exit code를 토론에 넘깁니다. 에이전트는 `@test`/`@run`으로 스스로 검증을
   요청할 수 있고, 결과는 실행 근거(`evidence`) 노드로 아이디어 지도에 붙습니다.
 - 노드 상세 패널 탭 전환: "이 아이디어 발언" ↔ "전체 대화"(근거 발언은 강조 표시)
+- 터미널 TUI(선택): 웹 화면 대신 터미널 한 화면에서 토론·지도·분기·실행을 그대로
+  쓸 수 있습니다 (`tui/` · `./run-tui.sh`, Textual 기반, REST + SSE 클라이언트)
 
 ## 구조
 
 ```
 프론트엔드 (React + React Flow, SSE 클라이언트)
+터미널 TUI (Textual, REST + SSE 클라이언트)   ← tui/
    │  REST + SSE
 백엔드 (FastAPI)
    ├── 토론 엔진 → 스케줄러 → LLM 프로바이더 (OpenAI 호환 / mock)
@@ -53,6 +56,7 @@ Nodus는 AI가 정답을 내미는 곳이 아니라, **AI와 함께 가능성을
 
 프론트엔드: React, TypeScript, Vite, React Flow, 순수 CSS.
 백엔드: Python 3.12 이상, FastAPI, Pydantic v2, SQLAlchemy 2 (async), httpx, SSE.
+터미널 TUI: Python + Textual (tui/ 전용 venv, 백엔드 REST + SSE 클라이언트).
 인프라: Docker, Docker Compose, PostgreSQL 16.
 
 ## 실행하기
@@ -97,6 +101,26 @@ http://localhost:5173 을 엽니다. 그 창을 닫으면 둘 다 종료됩니�
 cd backend && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt && cd ..
 cd frontend && npm install && cd ..
 ```
+
+### 터미널 TUI (`run-tui.sh`)
+
+웹 화면 없이 터미널에서 바로 쓰고 싶으면 TUI로 돌립니다 (백엔드는 그대로 먼저 띄워 둡니다).
+
+```bash
+./run.sh &          # 또는 다른 창에서: cd backend && .venv/bin/python -m uvicorn app.main:app
+./run-tui.sh        # 채팅 + 지도/실행/가지 탭 + 상태줄이 한 화면에
+```
+
+한 번만 준비하면 되는 것:
+
+```bash
+cd tui && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt && cd ..
+```
+
+- 왼쪽은 대화(토큰이 실시간으로 흐릅니다), 오른쪽은 지도 / 실행 / 가지 탭입니다.
+- 입력줄에서 그냥 글자를 치면 사용자 메시지, `/`로 시작하면 명령입니다 — `/help` 참고.
+- `--api <주소>`(또는 `NODUS_API`), `--project <번호|id앞부분>`(또는 `NODUS_PROJECT`)로 시작할 수 있습니다.
+- 토론은 백엔드가 돌리므로 TUI를 꺼도 멈추지 않습니다.
 
 ### 로컬 개발
 
@@ -244,4 +268,5 @@ GET  /api/health                          헬스 + LLM 상태
 ## 프로젝트 구조
 
 `frontend/src`(`components/ graph/ chat/ settings/ api/ hooks/ types/`)와
-`backend/app`(`api/ agents/ graph/ branching/ execution/ project/ llm/ models/`)를 참고하세요.
+`backend/app`(`api/ agents/ graph/ branching/ execution/ project/ llm/ models/`),
+`tui/nodus_tui`(`api.py` REST+SSE 클라이언트, `app.py` Textual 화면, `nodus.tcss` 스타일)를 참고하세요.
