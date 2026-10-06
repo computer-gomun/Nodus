@@ -77,10 +77,18 @@ docker compose up --build
 amd64와 arm64(라즈베리파이, 애플 실리콘 포함) 모두 같은 명령으로 빌드됩니다 —
 백엔드 이미지의 Docker CLI는 빌드 대상 아키텍처에 맞춰 내려받습니다.
 
-### Windows 원클릭 (`run.bat`)
+### Windows 원클릭 (`start.bat`)
 
-백엔드 venv와 `frontend/node_modules`가 준비돼 있으면(아래 참고) `run.bat`을 더블클릭하세요.
-백엔드(:8000)와 프론트엔드(:5173)를 콘솔 창 하나에서 띄우고, 둘 다 응답할 때까지 기다린 뒤
+**`start.bat`을 더블클릭하면 끝입니다.** Python 3.12+와 Node.js 18+만 설치돼 있으면
+처음 실행할 때 백엔드 `.venv` 생성 + `requirements.txt` 설치, `frontend/node_modules`
+설치(`npm install`), `backend/.env`·`frontend/.env` 복사를 자동으로 해 줍니다. 준비가 끝나면
+곧바로 백엔드(:8000)와 프론트엔드(:5173)를 실행하고 http://localhost:5173 을 엽니다.
+
+### Windows 수동 실행 (`run.bat`)
+
+이미 준비를 마친 뒤에는 `run.bat`을 직접 더블클릭해도 됩니다(설치 단계를 건너뜁니다).
+백엔드 venv와 `frontend/node_modules`가 준비돼 있으면(아래 참고) 백엔드(:8000)와
+프론트엔드(:5173)를 콘솔 창 하나에서 띄우고, 둘 다 응답할 때까지 기다린 뒤
 http://localhost:5173 을 엽니다. 그 창을 닫으면 둘 다 종료됩니다. 백엔드와 프론트엔드 로그는
 같은 창에 함께 출력됩니다.
 
